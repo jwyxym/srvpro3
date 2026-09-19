@@ -1,0 +1,27 @@
+[package]
+name = "srvpro3-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio-tungstenite.workspace = true
+tokio_kcp.workspace = true
+serde.workspace = true
+parking_lot.workspace = true
+sea-orm.workspace = true
+linkme.workspace = true
+tokio.workspace = true
+binrw.workspace = true
+futures.workspace = true
+tokio-util.workspace = true
+anyhow.workspace = true
+log.workspace = true
+ygopro.workspace = true
+ygopro-data.workspace = true
+ygopro-core-wrapper.workspace = true
+ygopro-handler.workspace = true
+ygopro-derive.workspace = true
+
+srvpro3-log.workspace = true
+srvpro3-database.workspace = true
+srvpro3-config.workspace = true

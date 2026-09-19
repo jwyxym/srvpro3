@@ -1,0 +1,14 @@
+[package]
+name = "srvpro3-init"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+
+srvpro3-config.workspace = true
+srvpro3-database.workspace = true
+srvpro3-log.workspace = true
+srvpro3-http.workspace = true
+srvpro3-server.workspace = true

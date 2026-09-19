@@ -1,0 +1,17 @@
+[package]
+name = "srvpro3-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum.workspace = true
+serde = { workspace = true, features = ["derive"] }
+tokio.workspace = true
+anyhow.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+
+srvpro3-log.workspace = true
+srvpro3-config.workspace = true
+srvpro3-database.workspace = true
+srvpro3-server.workspace = true
