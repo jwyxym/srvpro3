@@ -32,7 +32,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 					let output = write.sink_map_err(anyhow::Error::from).with(|body| {
 						futures::future::ready(packet(body).map(|bytes| Message::Binary(bytes.into())))
 					});
-					session(Box::pin(input), Box::pin(output), ready, None, address.ip()).await
+					session(Box::pin(input), Box::pin(output), ready, None, address.ip(), Protocol::Ws).await
 				});
 			}
 		}

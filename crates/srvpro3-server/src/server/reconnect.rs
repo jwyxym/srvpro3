@@ -2,7 +2,7 @@ use std::{net::IpAddr, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time:
 use futures::{Stream, StreamExt};
 use tokio::{sync::{mpsc, watch}, time::Instant};
 use ygopro_data::{complex::Complex, constants::{Color, DuelStage, Netplayer}, data::Deck, message::{ctos, stoc, gm}};
-use super::{decode::decode, room::RoomRecord, transport::Connection};
+use super::{decode::decode, room::RoomRecord, transport::{Connection, Protocol}};
 use crate::rooms::RoomList;
 
 pub struct Handle {
@@ -41,9 +41,26 @@ fn connected(record: &Arc<Mutex<RoomRecord>>, rooms: &RoomList, room: &str, id: 
 	record.update_info(rooms, room);
 }
 
+fn notify_udp_kick(record: &Arc<Mutex<RoomRecord>>, kicker: u64, target: Netplayer) {
+	let Netplayer::Player(_) = target else { return };
+	let outgoing = {
+		let record = record.lock().unwrap();
+		if record.stage != DuelStage::Begin || !record.players.get(&kicker).is_some_and(|player| player.is_host) {
+			return;
+		}
+		record.players.values().find(|player| {
+			player.connected && player.position == target && player.protocol == Protocol::Udp
+		}).map(|player| player.outgoing.clone())
+	};
+	if let Some(outgoing) = outgoing {
+		let _ = outgoing.try_send(bytes(stoc::LeaveGame { pos: target }.into()));
+	}
+}
+
 struct Live {
 	incoming: mpsc::Receiver<Vec<u8>>,
 	outgoing: mpsc::Sender<Vec<u8>>,
+	protocol: Protocol,
 	verified: bool,
 }
 
@@ -60,7 +77,7 @@ pub async fn run(
 	id: u64,
 	seconds: u64,
 ) {
-	let mut live = Some(Live { incoming: connection.incoming, outgoing: connection.outgoing, verified: true });
+	let mut live = Some(Live { incoming: connection.incoming, outgoing: connection.outgoing, protocol: connection.protocol, verified: true });
 	let mut deadline = None;
 	let mut join_packet = None;
 	let mut type_packet = None;
@@ -71,7 +88,7 @@ pub async fn run(
 			if deadline.is_none() {
 				let eligible = {
 					let record = record.lock().unwrap();
-					closing.is_none() && seconds > 0 && !matches!(record.stage, DuelStage::Begin | DuelStage::End)
+					closing.is_none() && seconds > 0 && record.stage == DuelStage::Dueling
 						&& record.players.get(&id).is_some_and(|player| matches!(player.position, Netplayer::Player(_)) && player.reconnect_deck.is_some())
 				};
 				if !eligible { break; }
@@ -128,10 +145,11 @@ pub async fn run(
 				let Some(candidate) = candidate else { break };
 				if closing.is_some() || live.is_some() || deadline.is_none() { continue; }
 				let (Some(join), Some(kind)) = (&join_packet, &type_packet) else { break };
+				let protocol = candidate.protocol;
 				let outgoing = candidate.outgoing;
 				if outgoing.try_send(join.clone()).is_err() || outgoing.try_send(kind.clone()).is_err() { continue; }
 				let _ = outgoing.try_send(bytes(stoc::Chat { player: Color::Lightblue.into(), msg: "检测到断线座位，请提交原卡组以验证重连。".into() }.into()));
-				live = Some(Live { incoming: candidate.incoming, outgoing, verified: false });
+				live = Some(Live { incoming: candidate.incoming, outgoing, protocol, verified: false });
 			}
 			frame = async { live.as_mut().unwrap().incoming.recv().await }, if live.is_some() => {
 				let Some(frame) = frame else { live = None; continue; };
@@ -159,10 +177,17 @@ pub async fn run(
 					if engine.send(ygopro::duel::Request::Command { name: "srvpro_resume", arguments: Some(Box::new(slot)) }).is_err() { break; }
 					socket.verified = true;
 					deadline = None;
+					if let Some(player) = record.lock().unwrap().players.get_mut(&id) {
+						player.protocol = socket.protocol;
+						player.outgoing = socket.outgoing.clone();
+					}
 					connected(&record, &rooms, &room_id, id, true);
 					continue;
 				}
 				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
+				if let ctos::Message::HsKick(kick) = &message {
+					notify_udp_kick(&record, id, kick.pos);
+				}
 				{
 					let mut record = record.lock().unwrap();
 					record.observe_input(id, &message);

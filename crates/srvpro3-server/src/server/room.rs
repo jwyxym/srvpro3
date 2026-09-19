@@ -100,6 +100,7 @@ impl RoomRecord {
 			stoc::Message::TypeChange(value) => {
 				if let Some(player) = self.players.get_mut(&id) {
 					player.position = value.player;
+					player.is_host = value.host;
 					player.deck = match value.player {
 						Netplayer::Player(slot) => self.accepted_decks.get(&slot).cloned(),
 						_ => None,

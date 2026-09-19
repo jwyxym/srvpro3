@@ -18,8 +18,16 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const QUEUE: usize = 64;
 const MAX_CLIENTS: usize = 1024;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Protocol {
+	Tcp,
+	Udp,
+	Ws,
+}
+
 pub struct Connection {
 	pub peer_ip: IpAddr,
+	pub protocol: Protocol,
 	pub handshake: Handshake,
 	pub initial: Vec<ctos::Message>,
 	pub incoming: mpsc::Receiver<Vec<u8>>,
@@ -74,13 +82,13 @@ impl Listeners {
 	}
 }
 
-async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Connection>, idle: Option<Duration>, peer_ip: IpAddr) -> Result<()> {
+async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Connection>, idle: Option<Duration>, peer_ip: IpAddr, protocol: Protocol) -> Result<()> {
 	let (handshake, initial) = timeout(TIMEOUT, handshake::handshake(&mut input)).await
 		.context("等待 PlayerInfo 和 JoinGame 超时（10 秒）")?
 		.context("业务握手失败")?;
 	let (incoming_tx, incoming) = mpsc::channel(QUEUE);
 	let (outgoing, mut outgoing_rx) = mpsc::channel(QUEUE);
-	timeout(TIMEOUT, ready.send(Connection { peer_ip, handshake, initial, incoming, outgoing })).await
+	timeout(TIMEOUT, ready.send(Connection { peer_ip, protocol, handshake, initial, incoming, outgoing })).await
 		.context("提交进房请求超时（10 秒）")?
 		.context("房间服务接收通道已关闭")?;
 	let result: Result<()> = async {

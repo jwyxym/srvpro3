@@ -21,7 +21,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 						.little_endian().new_write(write)
 						.sink_map_err(anyhow::Error::from)
 						.with(|bytes: Vec<u8>| futures::future::ready(Ok(bytes.into())));
-					session(Box::pin(input), Box::pin(output), ready, None, address.ip()).await
+					session(Box::pin(input), Box::pin(output), ready, None, address.ip(), Protocol::Tcp).await
 				});
 			}
 		}

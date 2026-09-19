@@ -207,7 +207,10 @@ impl Server {
 		record.lock().unwrap().players.insert(connection_id, PlayerRecord {
 			name: connection.handshake.name.clone(),
 			position: Netplayer::Unknown,
+			is_host: false,
 			connected: true,
+			protocol: connection.protocol,
+			outgoing: connection.outgoing.clone(),
 			deck: None,
 			reconnect_deck: None,
 		});

@@ -1,0 +1,31 @@
+[db]
+db = ""
+address = "srvpro3.db"
+user = ""
+port = ""
+password = ""
+
+[redis]
+address = ""
+port = ""
+password = ""
+db = ""
+
+[http_api]
+port = 8080
+room = true
+history = true
+
+[http_api.user]
+user = { password = "", permissions = 3 }
+
+[server]
+reconnect_timeout_secs = 180
+side_timeout_secs = 180
+
+[server.tcp]
+port = 7911
+[server.udp]
+port = 7913
+[server.ws]
+port = 7912

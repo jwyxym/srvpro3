@@ -34,7 +34,7 @@ pub async fn listen(mut listener: KcpListener, ready: mpsc::Sender<Connection>) 
 						.little_endian().new_write(write)
 						.sink_map_err(anyhow::Error::from)
 						.with(|bytes: Vec<u8>| futures::future::ready(Ok(bytes.into())));
-					session(Box::pin(input), Box::pin(output), ready, Some(Duration::from_secs(300)), address.ip()).await
+					session(Box::pin(input), Box::pin(output), ready, Some(Duration::from_secs(300)), address.ip(), Protocol::Udp).await
 				});
 			}
 		}
