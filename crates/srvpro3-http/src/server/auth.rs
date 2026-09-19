@@ -1,12 +1,25 @@
-use axum::{extract::{Query, Request}, http::{header, HeaderValue, Method, StatusCode}, middleware::Next, response::{IntoResponse, Response}};
+use axum::{
+	extract::{Query, Request},
+	http::{self, header, HeaderValue, Method, StatusCode},
+	middleware::Next,
+	response::{IntoResponse, Response},
+	body::Body
+};
 use serde::Deserialize;
 use srvpro3_config::Permissions;
 
 #[derive(Deserialize)]
-struct Credentials {
+pub struct Credentials {
 	#[serde(alias = "username")]
-	user: String,
-	password: String,
+	pub user: String,
+	pub password: String,
+}
+
+pub fn can_write(credentials: &Credentials) -> bool {
+	let Ok(config) = srvpro3_config::get() else { return false };
+	config.http_api.user.get(&credentials.user).is_some_and(|user| {
+		user.password == credentials.password && matches!(user.permissions, Permissions::Write | Permissions::Sudo)
+	})
 }
 
 fn check(request: &Request) -> Result<(), (StatusCode, &'static str)> {
@@ -29,7 +42,7 @@ fn check(request: &Request) -> Result<(), (StatusCode, &'static str)> {
 }
 
 pub async fn authorize(request: Request, next: Next) -> Response {
-	let mut response = match check(&request) {
+	let mut response: http::Response<Body> = match check(&request) {
 		Ok(()) => next.run(request).await,
 		Err(error) => error.into_response(),
 	};

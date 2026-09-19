@@ -57,6 +57,7 @@ pub struct Server {
 	finished_rx: mpsc::UnboundedReceiver<String>,
 	disconnected_tx: mpsc::UnboundedSender<(String, u64)>,
 	disconnected_rx: mpsc::UnboundedReceiver<(String, u64)>,
+	interrupt_rx: mpsc::UnboundedReceiver<rooms::Interrupt>,
 }
 
 impl Server {
@@ -70,6 +71,8 @@ impl Server {
 		let listeners: transport::Listeners = transport::Listeners::bind(tcp_port, udp_prot, ws_port).await?;
 		let (finished_tx, finished_rx) = mpsc::unbounded_channel();
 		let (disconnected_tx, disconnected_rx) = mpsc::unbounded_channel();
+		let (interrupt_tx, interrupt_rx) = mpsc::unbounded_channel();
+		rooms::register_control(interrupt_tx);
 		Ok(Self {
 			room_list: rooms::register(),
 			listeners: Some(listeners),
@@ -85,6 +88,7 @@ impl Server {
 			finished_rx,
 			disconnected_tx,
 			disconnected_rx,
+			interrupt_rx,
 		})
 	}
 
@@ -109,7 +113,9 @@ impl Server {
 				}
 				Some(room_id) = self.finished_rx.recv() => {
 					if let Some(room) = self.rooms.remove(&room_id) {
-						self.room_list.write().remove(&room_id);
+						if let Some(info) = self.room_list.write().remove(&room_id) {
+							rooms::closed(info);
+						}
 						let records = room.record.lock().unwrap().history.clone();
 						spawn(async move {
 							if let Err(error) = history::persist(records).await {
@@ -127,11 +133,21 @@ impl Server {
 						room.record.lock().unwrap().update_info(&self.room_list, &room_id);
 					}
 				}
+				Some(request) = self.interrupt_rx.recv() => {
+					let _ = request.result.send(self.interrupt_room(&request.room_id));
+				}
 				Some(connection) = ready_rx.recv() => {
 					self.accept_connection(connection)?;
 				}
 			}
 		}
+	}
+
+	fn interrupt_room(&mut self, room_id: &str) -> bool {
+		let Some(room) = self.rooms.get(room_id) else { return false };
+		let engine = room.record.lock().unwrap().engine.as_ref().and_then(|engine| engine.upgrade());
+		let Some(engine) = engine else { return false };
+		engine.send(ygopro::duel::Request::Command { name: "srvpro_interrupt", arguments: None }).is_ok()
 	}
 
 	fn accept_connection(&mut self, connection: transport::Connection) -> Result<(), Error> {
@@ -195,14 +211,24 @@ impl Server {
 			}
 		});
 		room.connections += 1;
-		self.room_list.write().entry(room_id.clone()).or_insert_with(|| rooms::RoomInfo {
-			room_id: room_id.clone(),
-			connections: room.connections,
-			player_a: Vec::new(),
-			player_b: Vec::new(),
-			spectators: 0,
-			chats: Vec::new(),
-		});
+		let added = {
+			let mut rooms = self.room_list.write();
+			if rooms.contains_key(&room_id) {
+				None
+			} else {
+				let info = rooms::RoomInfo {
+					room_id: room_id.clone(),
+					connections: room.connections,
+					player_a: Vec::new(),
+					player_b: Vec::new(),
+					spectators: 0,
+					chats: Vec::new(),
+				};
+				rooms.insert(room_id.clone(), info.clone());
+				Some(info)
+			}
+		};
+		if let Some(info) = added { rooms::added(info); }
 		let record = room.record.clone();
 		record.lock().unwrap().players.insert(connection_id, PlayerRecord {
 			name: connection.handshake.name.clone(),

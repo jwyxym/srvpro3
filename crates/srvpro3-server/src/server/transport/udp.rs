@@ -18,7 +18,7 @@ pub async fn listen(mut listener: KcpListener, ready: mpsc::Sender<Connection>) 
 	loop {
 		tokio::select! {
 			client = clients.join_next(), if !clients.is_empty() => {
-				if let Some(result) = client { report(result); }
+				let _ = client;
 			}
 			accepted = listener.accept() => {
 				let (socket, address) = accepted?;

@@ -10,6 +10,8 @@ tokio.workspace = true
 anyhow.workspace = true
 log.workspace = true
 parking_lot.workspace = true
+futures.workspace = true
+serde_json.workspace = true
 
 srvpro3-log.workspace = true
 srvpro3-config.workspace = true

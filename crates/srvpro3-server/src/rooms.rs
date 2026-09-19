@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, sync::{Arc, LazyLock, Weak}};
 use parking_lot::{RwLock, RawRwLock, lock_api::{RwLockReadGuard, RwLock as RwLockGetGuard}};
 use serde::Serialize;
 use anyhow::{Result, ensure};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RoomInfo {
@@ -31,11 +32,49 @@ pub struct ChatInfo {
 pub type RoomList = Arc<RwLock<BTreeMap<String, RoomInfo>>>;
 static CURRENT: LazyLock<RwLock<Weak<RwLock<BTreeMap<String, RoomInfo>>>>> =
 	LazyLock::new(|| RwLock::new(Weak::new()));
+static CONTROL: LazyLock<RwLock<Option<mpsc::UnboundedSender<Interrupt>>>> =
+	LazyLock::new(|| RwLock::new(None));
+static EVENTS: LazyLock<broadcast::Sender<RoomEvent>> =
+	LazyLock::new(|| broadcast::channel(128).0);
+
+#[derive(Clone, Debug)]
+pub enum RoomEvent {
+	Add(RoomInfo),
+	Close(RoomInfo),
+}
+
+pub struct Interrupt {
+	pub room_id: String,
+	pub result: oneshot::Sender<bool>,
+}
 
 pub fn register() -> RoomList {
 	let rooms: Arc<RwLockGetGuard<RawRwLock, BTreeMap<String, RoomInfo>>> = Arc::new(RwLock::new(BTreeMap::new()));
 	*CURRENT.write() = Arc::downgrade(&rooms);
 	rooms
+}
+
+pub fn register_control(sender: mpsc::UnboundedSender<Interrupt>) {
+	*CONTROL.write() = Some(sender);
+}
+
+pub async fn interrupt(room_id: String) -> Result<bool> {
+	let sender = CONTROL.read().clone().ok_or_else(|| anyhow::anyhow!("对局服务器未启动"))?;
+	let (result, receiver) = oneshot::channel();
+	sender.send(Interrupt { room_id, result }).map_err(|_| anyhow::anyhow!("对局服务器未启动"))?;
+	receiver.await.map_err(|_| anyhow::anyhow!("中断房间请求失败"))
+}
+
+pub fn subscribe() -> broadcast::Receiver<RoomEvent> {
+	EVENTS.subscribe()
+}
+
+pub fn added(room: RoomInfo) {
+	let _ = EVENTS.send(RoomEvent::Add(room));
+}
+
+pub fn closed(room: RoomInfo) {
+	let _ = EVENTS.send(RoomEvent::Close(room));
 }
 
 pub fn get(page: u64, pagesize: u64) -> Result<(Vec<RoomInfo>, u64)> {

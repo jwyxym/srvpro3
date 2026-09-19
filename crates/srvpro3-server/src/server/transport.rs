@@ -5,7 +5,7 @@ pub mod udp;
 use std::{net::IpAddr, pin::Pin, time::Duration};
 use anyhow::{Context, Result, ensure, Error};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use tokio::{net::TcpListener, sync::mpsc, task::{JoinSet, JoinError}, time::timeout};
+use tokio::{net::TcpListener, sync::mpsc, task::JoinSet, time::timeout};
 use tokio_kcp::KcpListener;
 use ygopro_data::message::ctos;
 use super::handshake::{self, Handshake};
@@ -140,12 +140,4 @@ fn unpack(mut bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
 		bytes = &bytes[len + 2..];
 	}
 	Ok(frames)
-}
-
-fn report(result: Result<Result<()>, JoinError>) {
-	match result {
-		Ok(Ok(())) => {}
-		Ok(Err(error)) => error!("连接已关闭：{error:#}"),
-		Err(error) => error!("连接任务异常：{error}"),
-	}
 }

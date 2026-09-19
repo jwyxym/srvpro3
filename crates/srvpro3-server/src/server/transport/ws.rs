@@ -6,7 +6,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 	loop {
 		tokio::select! {
 			client = clients.join_next(), if !clients.is_empty() => {
-				if let Some(result) = client { report(result); }
+				let _ = client;
 			}
 			accepted = listener.accept() => {
 				let (socket, address) = accepted?;

@@ -10,6 +10,7 @@ pub struct HttpApi {
 	pub port: u16,
 	pub room: bool,
 	pub history: bool,
+	pub ws: bool,
 	pub user: BTreeMap<String, User>
 }
 
@@ -19,7 +20,8 @@ impl Default for HttpApi {
 			port: 8080,
 			room: true,
 			history: true,
-			user: BTreeMap::from([("user".into(), User::default())]),
+			ws: true,
+			user: BTreeMap::new()
 		}
 	}
 }
