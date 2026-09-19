@@ -101,6 +101,7 @@ pub async fn run(
 		tokio::select! {
 			message = engine_output.next() => {
 				let Some(message) = message else { break };
+				let mut leave_position = None;
 				if let Ok(value) = message.try_get() {
 					match value {
 						stoc::Message::JoinGame(_) => join_packet = Some(message.data.to_vec()),
@@ -117,12 +118,19 @@ pub async fn run(
 					if matches!(value, stoc::Message::FieldFinish(_)) {
 						if let Some(slot) = slot { record.refreshing.remove(&slot); }
 					}
+					if matches!(value, stoc::Message::DuelEnd(_)) {
+						leave_position = record.players.get(&id).map(|player| player.position);
+					}
 					if matches!(value, stoc::Message::TypeChange(_)) { record.update_info(&rooms, &room_id); }
 				}
 				if let Some(socket) = live.as_ref().filter(|socket| socket.verified) {
 					// 慢连接也不能阻塞房间结束或保留座位计时。
 					if socket.outgoing.try_send(message.data.to_vec()).is_err() {
 						live = None;
+					} else if socket.protocol == Protocol::Udp {
+						if let Some(position) = leave_position {
+							let _ = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into()));
+						}
 					}
 				}
 			}
