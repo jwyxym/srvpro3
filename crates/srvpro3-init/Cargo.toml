@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 log.workspace = true
+tokio.workspace = true
+rustyline-async = "0.4.9"
 
 srvpro3-config.workspace = true
 srvpro3-cards.workspace = true

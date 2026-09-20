@@ -34,5 +34,6 @@ pub async fn create(
 
 	let result: Model = match_records.insert(db).await?;
 	clear!("history:*");
+	super::events::publish(super::events::Event::Add(result.clone()));
 	Ok(result)
 }

@@ -1,10 +1,10 @@
 import mitt from 'mitt';
 
-type Events = {
+export type Events = {
 	open : void,
 	close : void,
 	msg : {
-		type : 'all' | 'host' | 'add' | 'close' | 'update';
+		type : 'room_all' | 'host' | 'room_add' | 'room_close' | 'room_update' | 'history_add' | 'history_update' | 'history_delete' | 'history_reset' | 'cards_upload';
 		msg : Object;
 	}
 };

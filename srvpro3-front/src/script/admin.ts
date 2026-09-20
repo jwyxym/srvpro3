@@ -4,7 +4,13 @@ const admin = reactive({
 	name : '',
 	pass : '',
 	to_query : function () {
-		return `?user=${this.name}&password=${this.pass}`
+		if (!this.name || !this.pass)
+			return '';
+		return `?user=${this.name}&password=${this.pass}`;
+	},
+	clear : function () {
+		this.name = '';
+		this.pass = '';
 	}
 });
 

@@ -1,20 +1,43 @@
 use anyhow::Error;
-use std::{io::{stdout, stdin, Write}, fs::read_to_string};
+use std::fs::read_to_string;
+use tokio::time::{Duration, Instant};
+use srvpro3_log::*;
+
+fn cards_reload_interval() -> Result<Duration, Error> {
+	Ok(Duration::from_secs(srvpro3_config::get()?.cards.reload.max(0) as u64))
+}
 
 pub async fn command() -> Result<(), Error> {
+	let mut input = super::input::start()?;
+	let mut reload_interval = cards_reload_interval()?;
+	let timer = tokio::time::sleep(reload_interval);
+	tokio::pin!(timer);
+	let mut input_open = true;
 	loop {
-		stdout().flush()?;
-		let mut input: String = String::new();
-		stdin().read_line(&mut input)?;
-		match input.trim() {
-			"reload" => {
-				reload().await?;
+		tokio::select! {
+			biased;
+			input = input.receiver.recv(), if input_open => {
+				let Some(input) = input else { input_open = false; continue; };
+				match input?.trim() {
+					"reload" => {
+						reload().await?;
+						reload_interval = cards_reload_interval()?;
+						timer.as_mut().reset(Instant::now() + reload_interval);
+					}
+					"exit" => {
+						srvpro3_server::shutdown().await?;
+						break;
+					}
+					_ => {}
+				}
+			},
+			_ = &mut timer, if !reload_interval.is_zero() => {
+				if let Err(error) = srvpro3_cards::init().await {
+					error!("定时重载卡片失败：{error:#}");
+				}
+				// 从本次完成时计时，失败也等待一个周期再重试。
+				timer.as_mut().reset(Instant::now() + reload_interval);
 			}
-			"exit" => {
-				srvpro3_server::shutdown().await?;
-				break;
-			}
-			_ => {}
 		}
 	}
 	Ok(())

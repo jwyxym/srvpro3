@@ -94,6 +94,7 @@ pub async fn run(
 	let mut type_packet = None;
 	let mut duel_number = 0;
 	let mut closing = None;
+	let mut udp_leave_sent = false;
 	loop {
 		if live.is_none() {
 			if deadline.is_none() {
@@ -140,7 +141,7 @@ pub async fn run(
 						live = None;
 					} else if socket.protocol == Protocol::Udp {
 						if let Some(position) = leave_position {
-							let _ = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into()));
+							udp_leave_sent = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into())).is_ok();
 						}
 					}
 				}
@@ -170,6 +171,7 @@ pub async fn run(
 				if outgoing.try_send(join.clone()).is_err() || outgoing.try_send(kind.clone()).is_err() { continue; }
 				let _ = outgoing.try_send(bytes(stoc::Chat { player: Color::Lightblue.into(), msg: "检测到断线座位，请提交原卡组以验证重连。".into() }.into()));
 				live = Some(Live { incoming: candidate.incoming, outgoing, protocol, close, verified: false });
+				udp_leave_sent = false;
 			}
 			frame = async { live.as_mut().unwrap().incoming.recv().await }, if live.is_some() => {
 				let Some(frame) = frame else { live = None; continue; };
@@ -220,6 +222,33 @@ pub async fn run(
 		}
 	}
 	available.store(false, Ordering::Release);
+	// 引擎结束不等于传输连接结束：历史记录仍可能持有 outgoing，必须主动关闭。
+	let player = {
+		let mut record = record.lock().unwrap();
+		record.players.get_mut(&id).map(|player| (
+			player.protocol, player.position, player.outgoing.clone(), player.close.take(),
+		))
+	};
+	if let Some((protocol, position, outgoing, close)) = player {
+		if protocol == Protocol::Udp {
+			if !udp_leave_sent {
+				let _ = tokio::time::timeout(Duration::from_millis(200), outgoing.send(bytes(stoc::LeaveGame { pos: position }.into()))).await;
+			}
+			// 为 KCP 留出发送离场消息的时间，避免关闭会话时丢掉待发送数据。
+			tokio::time::sleep(Duration::from_millis(200)).await;
+		}
+		if let Some(close) = close { let _ = close.send(()); }
+	}
+	// 尚未完成身份验证的重连，其关闭信号还没有移交给 PlayerRecord。
+	if let Some(socket) = live.as_mut() {
+		if let Some(close) = socket.close.take() {
+			if socket.protocol == Protocol::Udp {
+				let _ = tokio::time::timeout(Duration::from_millis(200), socket.outgoing.send(bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()))).await;
+				tokio::time::sleep(Duration::from_millis(200)).await;
+			}
+			let _ = close.send(());
+		}
+	}
 	connected(&record, &rooms, &room_id, id, false);
 	// 丢弃 engine_input 使 DuelHost 的长期桥接流结束，只在此时向引擎离场。
 }

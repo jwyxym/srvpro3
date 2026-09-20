@@ -8,6 +8,8 @@ use std::{collections::BTreeMap, fmt};
 pub struct Cards {
 	pub expansions: Vec<String>,
 	pub ypk: bool,
+	/// 自动重载间隔，单位秒；小于等于 0 表示禁用。
+	pub reload: i32,
 	pub lflist: LFlist,
 	#[serde(with = "excode")]
 	pub excode: BTreeMap<u32, Vec<u16>>
@@ -18,6 +20,7 @@ impl Default for Cards {
 		Self {
 			expansions: Vec::new(),
 			ypk: true,
+			reload: 1800,
 			lflist: LFlist::None,
 			excode: BTreeMap::from([
 				(8512558, vec![0x8f, 0x54, 0x59, 0x82, 0x13a]),

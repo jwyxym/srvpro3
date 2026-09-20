@@ -5,3 +5,4 @@ pub use crate::srvpro_error as error;
 pub use crate::srvpro_info as info;
 pub use crate::srvpro_warn as warn;
 pub use init::init;
+pub use init::set_writer;

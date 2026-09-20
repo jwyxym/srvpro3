@@ -47,7 +47,7 @@ pub struct Usage {
 fn check() -> Result<(), (StatusCode, &'static str)> {
 	let config: RwLockReadGuard<'_, Config> = srvpro3_config::get()
 		.map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "配置尚未加载"))?;
-	if config.http_api.host { Ok(()) } else { Err((StatusCode::NOT_FOUND, "主机信息接口未启用")) }
+	if config.http_api.webui { Ok(()) } else { Err((StatusCode::NOT_FOUND, "WebUI未启用")) }
 }
 
 pub fn info() -> HostInfo {

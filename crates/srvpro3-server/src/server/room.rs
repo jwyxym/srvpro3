@@ -72,7 +72,7 @@ impl RoomRecord {
 				self.chats.push_back(ChatInfo {
 					player_id: id,
 					name: player.name.clone(),
-					content: chat.msg.to_string().chars().take(1000).collect(),
+					content: chat.msg.chars().take(1000).collect(),
 					created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
 				});
 			}

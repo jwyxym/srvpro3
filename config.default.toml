@@ -14,7 +14,7 @@ db = ""
 [http_api]
 port = 8080
 room = true
-host = true
+webui = true
 history = true
 
 [http_api.user]
@@ -43,6 +43,8 @@ port = 7913
 port = 7912
 
 [cards]
+# 自动重载间隔（秒），默认 30 分钟，小于等于 0 为禁用
+reload = 1800
 expansions = ["ygopro"]
 ypk = true
 lflist = ""

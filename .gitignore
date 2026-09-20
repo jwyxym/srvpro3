@@ -1,5 +1,6 @@
-/target
-/ygopro
-/windbot
+target
+ygopro
+windbot
+dist
 *.db
 config.toml

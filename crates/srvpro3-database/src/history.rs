@@ -6,6 +6,7 @@ mod cache;
 
 pub mod delete;
 pub mod read;
+pub mod events;
 
 pub use create::create;
 pub use entity::Model;

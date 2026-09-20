@@ -100,7 +100,10 @@ fn srvpro_side_timeout(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, con
 fn srvpro_interrupt(duel: &mut Duel, _: &mut Box<dyn Any + Send>, config: RecordConfig, timer: &mut SideTimer) -> &'static str {
 	timer.stop();
 	duel.sender.send(stoc::Chat { player: Color::Red.into(), msg: "房间已被管理员中断。".into() }.into(), SendTarget::All);
-	duel.sender.send(stoc::DuelEnd.into(), SendTarget::All);
+	// 等待开局的房间无需通知对局结束；猜拳、选先后手和换副仍属于已开局。
+	if matches!(duel.stage, DuelStage::Finger | DuelStage::Firstgo | DuelStage::Dueling | DuelStage::Siding) {
+		duel.sender.send(stoc::DuelEnd.into(), SendTarget::All);
+	}
 	config.0.lock().unwrap().stage = DuelStage::End;
 	"terminate"
 }

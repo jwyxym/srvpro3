@@ -30,5 +30,6 @@ pub async fn update(
 	clear!(&key);
 	clear!("history:all:*");
 
+	super::events::publish(super::events::Event::Update(updated.clone()));
 	Ok(updated)
 }

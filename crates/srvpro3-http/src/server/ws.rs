@@ -10,10 +10,11 @@ use serde::{Deserialize, Serialize};
 use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
 use tokio::time::{Duration, MissedTickBehavior};
 
-use super::{auth::{self, Credentials}, host};
+use super::{auth::{self, Credentials}, host, cards};
 
 use srvpro3_server::rooms::{self, RoomEvent};
 use srvpro3_config::Config;
+use srvpro3_database::history::events::{self as history_events, Event as HistoryEvent};
 
 #[derive(Serialize)]
 struct Outgoing<T> {
@@ -51,13 +52,26 @@ async fn send<T: Serialize>(socket: &mut futures::stream::SplitSink<WebSocket, M
 
 async fn client(socket: WebSocket, credentials: Credentials) {
 	let (mut output, mut input) = socket.split();
-	let (list, _) = rooms::get(0, u64::MAX).unwrap_or_default();
-	if !send(&mut output, "all", list).await { return; }
+	let mut history_events = history_events::subscribe();
 	let mut events = rooms::subscribe();
+	let mut cards_events = srvpro3_cards::subscribe();
+	// 重连时也发送当前数量，补齐断线期间错过的重载通知。
+	if let Ok(counts) = cards::get().await {
+		if !send(&mut output, "cards_upload", counts.0).await { return; }
+	}
+	let (list, _) = rooms::get(0, u64::MAX).unwrap_or_default();
+	if !send(&mut output, "room_all", list).await { return; }
 	let mut host_tick = tokio::time::interval(Duration::from_secs(1));
 	host_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 	loop {
 		tokio::select! {
+			event = cards_events.recv() => {
+				if matches!(event, Err(tokio::sync::broadcast::error::RecvError::Closed)) { break; }
+				// 通知积压时直接读取最新快照，无需逐次重放。
+				if let Ok(counts) = cards::get().await {
+					if !send(&mut output, "cards_upload", counts.0).await { break; }
+				}
+			}
 			message = input.next() => {
 				let Some(Ok(message)) = message else { break };
 				let Message::Text(text) = message else { continue };
@@ -76,17 +90,29 @@ async fn client(socket: WebSocket, credentials: Credentials) {
 				}
 			}
 			event = events.recv() => match event {
-				Ok(RoomEvent::Add(room)) => if !send(&mut output, "add", room).await { break; },
-				Ok(RoomEvent::Update(room)) => if !send(&mut output, "update", room).await { break; },
-				Ok(RoomEvent::Close(room)) => if !send(&mut output, "close", room).await { break; },
+				Ok(RoomEvent::Add(room)) => if !send(&mut output, "room_add", room).await { break; },
+				Ok(RoomEvent::Update(room)) => if !send(&mut output, "room_update", room).await { break; },
+				Ok(RoomEvent::Close(room)) => if !send(&mut output, "room_close", room).await { break; },
 				Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
 					let (list, _) = rooms::get(0, u64::MAX).unwrap_or_default();
-					if !send(&mut output, "all", list).await { break; }
+					if !send(&mut output, "room_all", list).await { break; }
 				}
 				Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
 			},
+			event = history_events.recv() => {
+				let enabled = srvpro3_config::get().is_ok_and(|config| config.http_api.history);
+				if !enabled { continue; }
+				let sent = match event {
+					Ok(HistoryEvent::Add(record)) => send(&mut output, "history_add", record).await,
+					Ok(HistoryEvent::Update(record)) => send(&mut output, "history_update", record).await,
+					Ok(HistoryEvent::Delete(deleted)) => send(&mut output, "history_delete", deleted).await,
+					Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => send(&mut output, "history_reset", serde_json::json!({})).await,
+					Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+				};
+				if !sent { break; }
+			}
 			_ = host_tick.tick() => {
-				let enabled = srvpro3_config::get().is_ok_and(|config| config.http_api.host);
+				let enabled = srvpro3_config::get().is_ok_and(|config| config.http_api.webui);
 				if enabled && !send(&mut output, "host", host::usage()).await { break; }
 			}
 		}

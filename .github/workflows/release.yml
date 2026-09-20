@@ -50,6 +50,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: srvpro3-front/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: srvpro3-front
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: srvpro3-front
+        run: npm run build
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -75,6 +90,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$bundle/windbot" | Out-Null
           Copy-Item "target/release/$env:BINARY" $bundle
           Copy-Item config.default.toml $bundle
+          Copy-Item -LiteralPath srvpro3-front/dist -Destination "$bundle/webui" -Recurse
           Invoke-WebRequest -Uri "https://github.com/jwyxym/windbot/releases/download/release-latest/$env:WINDBOT" -OutFile windbot.zip
           Expand-Archive -Path windbot.zip -DestinationPath "$bundle/windbot"
           Compress-Archive -Path "$bundle/*" -DestinationPath $archive

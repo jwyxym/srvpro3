@@ -7,3 +7,4 @@ edition = "2024"
 simple_logger.workspace = true
 log.workspace = true
 anyhow.workspace = true
+chrono.workspace = true

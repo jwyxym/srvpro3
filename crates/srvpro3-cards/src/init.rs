@@ -6,7 +6,7 @@ use anyhow::Error;
 use walkdir::WalkDir;
 use parking_lot::RwLock;
 use std::{collections::{BTreeMap, HashMap}, sync::Arc};
-use tokio::sync::OnceCell;
+use tokio::sync::{OnceCell, broadcast};
 use indexmap::IndexMap;
 use ygopro_cdb_reader::Card;
 
@@ -30,6 +30,9 @@ impl CardsSnapshot {
 }
 
 static SNAPSHOT: OnceCell<RwLock<Arc<CardsSnapshot>>> = OnceCell::const_new();
+static UPDATES: std::sync::LazyLock<broadcast::Sender<()>> = std::sync::LazyLock::new(|| broadcast::channel(16).0);
+
+pub fn subscribe() -> broadcast::Receiver<()> { UPDATES.subscribe() }
 
 pub fn get() -> Result<Arc<CardsSnapshot>, Error> {
 	let snapshot: &RwLock<Arc<CardsSnapshot>> = SNAPSHOT.get().ok_or_else(|| anyhow::anyhow!("卡片数据尚未加载"))?;
@@ -55,6 +58,7 @@ fn replace(snapshot: CardsSnapshot) -> Result<(), Error> {
 	} else {
 		SNAPSHOT.set(RwLock::new(snapshot)).map_err(|_| anyhow::anyhow!("卡片初始化失败"))?;
 	}
+	let _ = UPDATES.send(());
 	Ok(())
 }
 
