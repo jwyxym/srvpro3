@@ -25,3 +25,4 @@ ygopro-derive.workspace = true
 srvpro3-log.workspace = true
 srvpro3-database.workspace = true
 srvpro3-config.workspace = true
+srvpro3-cards.workspace = true

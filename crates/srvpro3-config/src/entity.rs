@@ -2,12 +2,14 @@ mod db;
 mod redis;
 mod api;
 mod server;
+mod cards;
 
 pub use server::Server;
 
 pub use db::{Database, DB};
 pub use redis::Redis;
 pub use api::{HttpApi, User, Permissions};
+pub use cards::Cards;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,5 +20,6 @@ pub struct Config {
 	pub db: Database,
 	#[serde(alias = "api")]
 	pub http_api: HttpApi,
-	pub redis: Redis
+	pub redis: Redis,
+	pub cards: Cards
 }

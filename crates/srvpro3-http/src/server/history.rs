@@ -1,8 +1,11 @@
 use axum::{extract::{Json, Query}, http::StatusCode};
 use serde::{Deserialize, Serialize};
-use srvpro3_database::history::Model;
+use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
 
 use super::query::ListQuery;
+
+use srvpro3_database::history::Model;
+use srvpro3_config::Config;
 
 #[derive(Serialize)]
 pub struct ListResponse {
@@ -41,25 +44,31 @@ pub struct AffectedResponse {
 	rows_affected: u64,
 }
 
+fn check() -> Result<(), (StatusCode, &'static str)> {
+	let config: RwLockReadGuard<'_, RawRwLock, Config> = srvpro3_config::get()
+		.map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "配置尚未加载"))?;
+	if config.http_api.history { Ok(()) } else { Err((StatusCode::NOT_FOUND, "历史记录接口未启用")) }
+}
+
 pub async fn list(
 	Query(query): Query<ListQuery>,
 ) -> Result<Json<ListResponse>, (StatusCode, &'static str)> {
+	check()?;
 	if query.page_size == 0 || query.page.checked_mul(query.page_size).is_none() {
 		return Err((StatusCode::BAD_REQUEST, "分页参数无效"));
 	}
-
 	let (list, total) = srvpro3_database::history::read::all(query.page, query.page_size)
 		.await
 		.map_err(|_| {
 			(StatusCode::INTERNAL_SERVER_ERROR, "查询历史记录失败")
 		})?;
-
 	Ok(Json(ListResponse { list, total }))
 }
 
 pub async fn create(
 	Json(request): Json<CreateRequest>,
 ) -> Result<Json<Model>, (StatusCode, &'static str)> {
+	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
 	let record: Model = srvpro3_database::history::create(
 		&db, request.player_a, request.player_b, request.deck_a, request.deck_b,
@@ -71,6 +80,7 @@ pub async fn create(
 pub async fn update(
 	Json(request): Json<UpdateRequest>,
 ) -> Result<Json<Model>, (StatusCode, &'static str)> {
+	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
 	let record: Model = srvpro3_database::history::update(&db, request.id, request.winner_id, request.replay)
 		.await.map_err(|_| (StatusCode::NOT_FOUND, "历史记录不存在或修改失败"))?;
@@ -80,6 +90,7 @@ pub async fn update(
 pub async fn delete(
 	Query(query): Query<DeleteQuery>,
 ) -> Result<Json<AffectedResponse>, (StatusCode, &'static str)> {
+	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
 	let result = match (query.id, query.room_id, query.all) {
 		(Some(id), None, false) => srvpro3_database::history::delete::by_id(&db, id).await,

@@ -6,7 +6,7 @@ pub struct Redis {
 	pub address: String,
 	pub port: String,
 	pub password: String,
-	pub db: String,
+	pub db: String
 }
 
 impl Redis {

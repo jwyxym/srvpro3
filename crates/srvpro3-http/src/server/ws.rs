@@ -1,9 +1,18 @@
-use axum::{extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Query}, response::Response};
+use axum::{
+	http::StatusCode,
+	extract::{
+		ws::{Message, WebSocket, WebSocketUpgrade}, Query
+	},
+	response::Response
+};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use srvpro3_server::rooms::{self, RoomEvent};
+use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
 
 use super::auth::{self, Credentials};
+
+use srvpro3_server::rooms::{self, RoomEvent};
+use srvpro3_config::Config;
 
 #[derive(Serialize)]
 struct Outgoing<T> {
@@ -19,11 +28,19 @@ enum Incoming {
 	Interrupt(String),
 }
 
+fn check() -> Result<(), (StatusCode, &'static str)> {
+	let config: RwLockReadGuard<'_, RawRwLock, Config> = srvpro3_config::get()
+		.map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "配置尚未加载"))?;
+	if config.http_api.ws && config.http_api.room { Ok(()) }
+		else { Err((StatusCode::NOT_FOUND, "WebSocket接口未启用")) }
+}
+
 pub async fn connect(
 	ws: WebSocketUpgrade,
 	Query(credentials): Query<Credentials>,
-) -> Response {
-	ws.on_upgrade(move |socket| client(socket, credentials))
+) -> Result<Response, (StatusCode, &'static str)> {
+	check()?;
+	Ok(ws.on_upgrade(move |socket| client(socket, credentials)))
 }
 
 async fn send<T: Serialize>(socket: &mut futures::stream::SplitSink<WebSocket, Message>, kind: &'static str, msg: T) -> bool {

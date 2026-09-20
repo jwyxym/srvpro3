@@ -6,10 +6,8 @@ pub struct Server {
 	pub tcp: Protocol,
 	pub udp: Protocol,
 	pub ws: WebSocket,
-	/// 断线保留座位的秒数，0 禁用重连。
 	pub reconnect_timeout_secs: u64,
-	/// 换副限时秒数，0 禁用。
-	pub side_timeout_secs: u64,
+	pub side_timeout_secs: u64
 }
 
 impl Default for Server {
@@ -27,7 +25,7 @@ impl Default for Server {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Protocol {
-	pub port: u16,
+	pub port: u16
 }
 
 impl Default for Protocol {
@@ -39,7 +37,7 @@ impl Default for Protocol {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct WebSocket {
-	pub port: u16,
+	pub port: u16
 }
 
 impl Default for WebSocket {

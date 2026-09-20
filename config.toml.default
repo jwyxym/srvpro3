@@ -29,3 +29,8 @@ port = 7911
 port = 7913
 [server.ws]
 port = 7912
+
+[cards]
+expansions = []
+ypk = true
+lflist = ""

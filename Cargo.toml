@@ -35,12 +35,20 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tokio-tungstenite = "0.29"
 tokio_kcp = "0.9.8"
 linkme = "0.3"
+zip = "0.6"
+walkdir = "2.5.0"
+regex = "1.11.2"
+lazy_static = "1.5.0"
+indexmap = { version = "2.13.0", features = ["serde"] }
+libloading = "0.9.0"
 ygopro-derive = "0.1.1"
-ygopro = { version = "0.1.4", features = ["koishi", "card", "zip"] }
-ygopro-data = { version = "0.1.1", features = ["card"] }
-ygopro-core-wrapper = { version = "0.1.3", features = ["koishi", "card"] }
+ygopro = { version = "0.1.4", default-features = false, features = ["koishi"] }
+ygopro-data = { version = "0.1.1", default-features = false }
+ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
 ygopro-handler = "0.1.2"
+ygopro_cdb_reader = "0.1.5"
 
+srvpro3-cards = { path = "./crates/srvpro3-cards" }
 srvpro3-config = { path = "./crates/srvpro3-config" }
 srvpro3-database = { path = "./crates/srvpro3-database" }
 srvpro3-deck = { path = "./crates/srvpro3-deck" }
@@ -52,8 +60,10 @@ srvpro3-server = { path = "./crates/srvpro3-server" }
 [workspace]
 resolver = "2"
 members = [
+	"crates/srvpro3-cards",
 	"crates/srvpro3-config",
-	"crates/srvpro3-database", "crates/srvpro3-deck",
+	"crates/srvpro3-database",
+	"crates/srvpro3-deck",
 	"crates/srvpro3-http",
 	"crates/srvpro3-init",
 	"crates/srvpro3-log",
