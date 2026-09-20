@@ -3,6 +3,7 @@ mod cards;
 mod history;
 mod host;
 mod query;
+mod reload;
 mod room;
 mod ws;
 mod webui;
@@ -15,6 +16,8 @@ use tokio::{net::TcpListener, sync::Mutex, task::JoinHandle, sync::MutexGuard};
 
 use srvpro3_config::{Config, DB};
 use srvpro3_log::*;
+
+pub use reload::register_reload;
 
 struct Server {
 	port: u16,
@@ -52,6 +55,7 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/ws", get(ws::connect))
 		.route("/host", get(host::get))
 		.route("/cards", get(cards::get))
+		.route("/reload", post(reload::reload))
 		.route("/room", get(room::list))
 		.route("/room", delete(room::interrupt))
 		.route("/history", get(history::list))
