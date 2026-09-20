@@ -5,7 +5,7 @@ mod ypk;
 use anyhow::Error;
 use walkdir::WalkDir;
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::{BTreeMap, HashMap}, sync::Arc};
 use tokio::sync::OnceCell;
 use indexmap::IndexMap;
 use ygopro_cdb_reader::Card;
@@ -62,6 +62,7 @@ pub async fn init() -> Result<(), Error> {
 	let config: parking_lot::RwLockReadGuard<'_, Config> = srvpro3_config::get()?;
 	let expansions: Vec<String> = config.cards.expansions.clone();
 	let ypk: bool = config.cards.ypk;
+	let excode: BTreeMap<u32, Vec<u16>> = config.cards.excode.clone();
 	drop(config);
 	let mut snapshot: CardsSnapshot = CardsSnapshot::new();
 	for i in expansions {
@@ -83,6 +84,8 @@ pub async fn init() -> Result<(), Error> {
 			}
 		}
 	}
+	add_excode(&mut snapshot, excode);
+
 	if ypk {
 		info!("加载ypk数量: {}", snapshot.packs.len());
 	} else {
@@ -91,4 +94,22 @@ pub async fn init() -> Result<(), Error> {
 	info!("加载禁卡表数量: {}", snapshot.lflists.len());
 	info!("加载卡片数量: {}", snapshot.cards.len());
 	replace(snapshot)
+}
+
+fn add_excode(snapshot: &mut CardsSnapshot, excode: BTreeMap<u32, Vec<u16>>) {
+	for (code, set_codes) in excode {
+		if let Some(card) = snapshot.cards.get_mut(&code)
+			&& let Some(mut i) = card.setcode.iter().position(|&x| x == 0) {
+			for set_code in set_codes {
+				if set_code == 0 {
+					continue;
+				}
+				if i >= card.setcode.len() {
+					break;
+				}
+				card.setcode[i] = set_code;
+				i += 1;
+			}
+		};
+	}
 }

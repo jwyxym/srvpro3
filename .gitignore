@@ -1,5 +1,4 @@
 /target
+/ygopro
 *.db
 config.toml
-*.cdb
-script

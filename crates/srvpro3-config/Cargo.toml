@@ -9,3 +9,4 @@ serde.workspace = true
 anyhow.workspace = true
 parking_lot.workspace = true
 tokio.workspace = true
+ygopro-data.workspace = true

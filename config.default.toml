@@ -24,6 +24,8 @@ reconnect_timeout = 180
 side_timeout = 180
 bo = 1
 lflist = -1
+#ot 0=OCG-ONLY, 1=TCG-ONLY, 2=SC-ONLY, 3=CUSTOM-ONLY, 4=NO-UNIQUE, 5=ALL
+ot = 5
 shuffle = true
 master_rule = 5
 draw_count = 1
@@ -39,6 +41,10 @@ port = 7913
 port = 7912
 
 [cards]
-expansions = []
+expansions = ["ygopro"]
 ypk = true
 lflist = ""
+
+[cards.excode]
+8512558 = [0x8f, 0x54, 0x59, 0x82, 0x13a]
+55088578 = [0x8f, 0x54, 0x59, 0x82, 0x13a]

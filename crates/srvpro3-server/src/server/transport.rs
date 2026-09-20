@@ -43,7 +43,7 @@ pub struct Listeners {
 impl Listeners {
 	pub async fn bind(
 		tcp_port: u16,
-		udp_prot:u16,
+		udp_port:u16,
 		ws_port: u16,
 	) -> Result<Self> {
 		let tcp: Option<TcpListener> = if tcp_port == 0 {
@@ -54,20 +54,20 @@ impl Listeners {
 			info!("TCP服务器启动成功 监听在端口：{}", tcp_port);
 			Some(listener)
 		};
+		let udp: Option<KcpListener> = if udp_port == 0 {
+			warn!("未启用UDP，如需启用，请修改config.toml的内容");
+			None
+		} else {
+			let listener: KcpListener = udp::bind(udp_port).await?;
+			info!("UDP服务器启动成功 监听在端口：{}", udp_port);
+			Some(listener)
+		};
 		let ws: Option<TcpListener> = if ws_port == 0 {
 			warn!("未启用WS，如需启用，请修改config.toml的内容");
 			None
 		} else {
 			let listener: TcpListener = TcpListener::bind(("0.0.0.0", ws_port)).await?;
 			info!("WebSocket服务器启动成功 监听在端口：{}", ws_port);
-			Some(listener)
-		};
-		let udp: Option<KcpListener> = if udp_prot == 0 {
-			warn!("未启用UDP，如需启用，请修改config.toml的内容");
-			None
-		} else {
-			let listener: KcpListener = udp::bind(udp_prot).await?;
-			info!("UDP服务器启动成功 监听在端口：{}", udp_prot);
 			Some(listener)
 		};
 		Ok(Self { tcp, ws, udp })

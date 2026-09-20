@@ -6,20 +6,22 @@ use std::{
 	borrow::Cow,
 	ffi::{CStr, c_char, c_int},
 	fs::read,
-	ptr::null_mut
+	ptr::null_mut,
+	sync::Arc
 };
 use ygopro_core_wrapper::{intptr_t, set_card_reader, set_message_handler, set_script_reader};
 use ygopro_data::{
-	constants::{Attribute, Linkmarkers, Race, Type},
-	data::{CoreCard, LFList}
+	constants::{Attribute, Category, Linkmarkers, OT, Race, Type},
+	data::{CoreCard, Card, LFList},
 };
 use ygopro::managers::{
 	config_manager::{ConfigManager, set_global as set_config_manager},
-	data_manager::{DataManager, set_global as set_data_manager},
+	data_manager::{DataManager, card_reader, set_global as set_data_manager},
 	deck_manager::{DeckManager, set_global as set_deck_manager},
 };
 
 use srvpro3_config::Config;
+use srvpro3_cards::CardsSnapshot;
 
 static SCRIPT_BUFFER: Mutex<[u8; 0x100000]> = Mutex::new([0u8; 0x100000]);
 
@@ -68,55 +70,53 @@ extern "C" fn script_reader (script_path: *const c_char, slen: *mut c_int) -> *m
 	}
 }
 
-pub extern "C" fn card_reader(code: u32, data: *mut CoreCard) -> u32 {
-	if data.is_null() {
-		return 0;
-	}
-	if let Ok(cards) = srvpro3_cards::get() {
-		let cards = &cards.cards;
-		if let Some(i) = cards.get(&code) {
-			let card: CoreCard = CoreCard {
-				code: i.code,
-				alias: i.alias,
-				setcode: i.setcode,
-				card_type: Type::from_bits_retain(i.card_type),
-				level: i.level,
-				attribute: Attribute::from_bits_retain(i.attribute),
-				race: Race::from_bits_retain(i.race),
-				attack: i.attack,
-				defense: i.defense,
-				left_scale: i.lscale,
-				right_scale: i.rscale,
-				link_marker: Linkmarkers::from_bits_retain(i.link_marker),
-				rule_code: 0,
-			};
-			unsafe { *data = card }
-			return 0;
-		}
-	}
-	unsafe { *data = CoreCard::default(); }
-	0
-}
-
 extern "C" fn core_message_handler(_: intptr_t, _: u32) -> u32 {
 	0
 }
 
 pub async fn init() -> Result<(), Error> {
 	let mut data_manager: DataManager = DataManager::new();
+	let cards: Arc<CardsSnapshot> = srvpro3_cards::get()?;
+	for (_, i) in &cards.cards {
+		let desc: [String; 16] = Default::default();
+		data_manager.cards.insert(
+			i.code,
+			Card {
+				card: CoreCard {
+					code: i.code,
+					alias: i.alias,
+					setcode: i.setcode,
+					card_type: Type::from_bits_retain(i.card_type),
+					level: i.level,
+					attribute: Attribute::from_bits_retain(i.attribute),
+					race: Race::from_bits_retain(i.race),
+					attack: i.attack,
+					defense: i.defense,
+					left_scale: i.lscale,
+					right_scale: i.rscale,
+					link_marker: Linkmarkers::from_bits_retain(i.link_marker),
+					rule_code: 0,
+				},
+				ot: OT::from_bits_retain(i.ot),
+				category: Category::from_bits_retain(i.category),
+				name: String::new(),
+				text: String::new(),
+				desc
+			},
+		);
+	}
 	data_manager.finalize_db();
 	let mut deck_manager: DeckManager = DeckManager::new();
-	if let Ok(cards) = srvpro3_cards::get() {
-		cards.lflists.iter().for_each(|(name, lflist)| {
-			deck_manager.lflists.push(LFList {
-				hash: lflist.hash,
-				name: name.to_string(),
-				content: lflist.lflist.clone(),
-				genesys: lflist.genesys,
-				glist: lflist.glist.clone()
-			})
-		});
-	}
+	cards.lflists.iter().for_each(|(name, lflist)| {
+		deck_manager.lflists.push(LFList {
+			hash: lflist.hash,
+			name: name.to_string(),
+			content: lflist.lflist.clone(),
+			genesys: lflist.genesys,
+			glist: lflist.glist.clone()
+		})
+	});
+	drop(cards);
 	let config_manager: ConfigManager = ConfigManager::new();
 	set_config_manager(config_manager);
 	set_data_manager(data_manager);

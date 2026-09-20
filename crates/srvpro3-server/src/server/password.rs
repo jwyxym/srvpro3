@@ -46,6 +46,7 @@ impl Password {
 		let mut host_info = HostInfo {
 			mode: Mode::Single,
 			lflist: lflist(defaults.lflist)?,
+			rule: defaults.ot,
 			no_shuffle_deck: !defaults.shuffle,
 			duel_rule: master_rule(defaults.master_rule)?,
 			draw_count: defaults.draw_count.min(35),

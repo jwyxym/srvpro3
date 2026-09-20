@@ -3173,6 +3173,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "tokio",
+ "ygopro-data",
 ]
 
 [[package]]

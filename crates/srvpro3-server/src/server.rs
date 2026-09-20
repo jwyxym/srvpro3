@@ -63,12 +63,12 @@ pub struct Server {
 impl Server {
 	pub async fn bind(
 		tcp_port: u16,
-		udp_prot:u16,
+		udp_port:u16,
 		ws_port: u16,
 		reconnect_timeout: u64,
 		side_timeout: u64
 	) -> Result<Self, Error> {
-		let listeners: transport::Listeners = transport::Listeners::bind(tcp_port, udp_prot, ws_port).await?;
+		let listeners: transport::Listeners = transport::Listeners::bind(tcp_port, udp_port, ws_port).await?;
 		let (finished_tx, finished_rx) = mpsc::unbounded_channel();
 		let (disconnected_tx, disconnected_rx) = mpsc::unbounded_channel();
 		let (interrupt_tx, interrupt_rx) = mpsc::unbounded_channel();
@@ -177,6 +177,7 @@ impl Server {
 			Ok(options) => options,
 			Err(error) => {
 				warn!("拒绝不支持的房间模式：{error}");
+				let _ = connection.outgoing.try_send(reconnect::bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()));
 				return Ok(());
 			}
 		};
