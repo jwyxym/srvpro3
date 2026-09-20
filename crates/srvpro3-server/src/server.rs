@@ -9,13 +9,14 @@ mod transport;
 mod reconnect;
 mod resilience;
 mod bot;
+mod tournament;
 
 use room::{RoomEntry, RoomRecord};
 use player::PlayerRecord;
 
 use super::rooms;
 
-use std::{collections::BTreeMap, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
+use std::{collections::{BTreeMap, BTreeSet}, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
 use parking_lot::{RawRwLock, lock_api::RwLock};
 use anyhow::Error;
 use futures::stream;
@@ -104,6 +105,10 @@ impl Server {
 			let _ = shutdown.await;
 			return Ok(());
 		}
+		let mut admissions = JoinSet::new();
+		let mut reports = JoinSet::new();
+		let mut reporting = BTreeSet::new();
+		let mut closed_matches = BTreeMap::new();
 		let mut bot_cleanup = tokio::time::interval(Duration::from_secs(1));
 		bot_cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 		loop {
@@ -111,6 +116,8 @@ impl Server {
 				_ = bot_cleanup.tick() => self.close_bot_only_rooms(),
 				_ = &mut shutdown => {
 					self.leave_udp_clients().await;
+					// 端口重载不应取消已经结束的比赛成绩上传。
+					reports.detach_all();
 					return Ok(());
 				}
 				result = listeners.join_next() => {
@@ -122,6 +129,23 @@ impl Server {
 				}
 				Some(room_id) = self.finished_rx.recv() => {
 					if let Some(room) = self.rooms.remove(&room_id) {
+						let report = {
+							let record = room.record.lock().unwrap();
+							record.tournament.as_ref().and_then(|room| room.report(&record.history))
+						};
+						if let Some((api, match_id, score)) = report {
+							let report_key = api.report_key(match_id);
+							reporting.insert(report_key.clone());
+							closed_matches.insert(report_key.clone(), tokio::time::Instant::now());
+							reports.spawn(async move {
+								let result = api.report(match_id, &score).await;
+								match &result {
+									Ok(()) => info!("比赛 {match_id} 成绩上传成功：{}", score.scores_csv),
+									Err(error) => error!("比赛 {match_id} 成绩上传失败，比分 {}，胜者 {:?}；请联系裁判核对后重启服务：{error}", score.scores_csv, score.winner_id),
+								}
+								(report_key, result.is_ok())
+							});
+						}
 						if let Some(info) = self.room_list.write().remove(&room_id) {
 							rooms::closed(info);
 						}
@@ -147,7 +171,38 @@ impl Server {
 					let _ = request.result.send(self.interrupt_room(&request.room_id));
 				}
 				Some(connection) = ready_rx.recv() => {
-					self.accept_connection(connection)?;
+					let Some(connection) = self.resume_connection(connection) else { continue };
+					let existing = password::Password::parse(&connection.handshake.pass).ok()
+						.and_then(|options| options.room_key)
+						.and_then(|key| self.rooms.get(&key))
+						.and_then(|room| room.record.lock().unwrap().tournament.as_ref().map(|room| room.api.clone()));
+					if admissions.len() >= 64 {
+						Self::reject_with_reason(connection, "比赛排表查询繁忙，请稍后重试");
+						continue;
+					}
+					admissions.spawn(async move {
+						let result = tournament::resolve(&connection.handshake.name, &connection.handshake.pass, existing).await;
+						(connection, result)
+					});
+				}
+				Some(result) = admissions.join_next(), if !admissions.is_empty() => {
+					match result {
+						Ok((connection, Ok(admission))) => {
+							if admission.as_ref().is_some_and(|value| reporting.contains(&value.report_key())
+								|| closed_matches.get(&value.report_key()).is_some_and(|closed| *closed >= value.requested_at)) {
+								Self::reject_with_reason(connection, "比赛成绩正在处理或待裁判确认，请稍后重试");
+							} else {
+								self.accept_connection(connection, admission)?;
+							}
+						}
+						Ok((connection, Err(error))) => {
+							Self::reject_with_reason(connection, &error.to_string());
+						}
+						Err(error) => error!("赛事匹配任务异常：{error}"),
+					}
+				}
+				Some(result) = reports.join_next(), if !reports.is_empty() => {
+					if let Ok((room_id, true)) = result { reporting.remove(&room_id); }
 				}
 			}
 		}
@@ -171,7 +226,7 @@ impl Server {
 	}
 
 	fn close_bot_only_rooms(&mut self) {
-		for (room_id, room) in &mut self.rooms {
+		for (_, room) in &mut self.rooms {
 			let record = room.record.lock().unwrap();
 			let has_bot = record.players.values().any(|player| player.is_bot && player.connected);
 			let waiting = record.stage == DuelStage::Begin;
@@ -217,18 +272,14 @@ impl Server {
 		}
 	}
 
-	fn accept_connection(&mut self, mut connection: transport::Connection) -> Result<(), Error> {
-		let bot_room = match bot::take_room(&connection) {
-			Ok(room) => room,
-			Err(_) => { Self::reject_connection(connection); return Ok(()); }
-		};
-		if let Some((room_id, record)) = &bot_room {
-			if !self.rooms.get(room_id).is_some_and(|room| Arc::ptr_eq(&room.record, record)) {
-				Self::reject_connection(connection);
-				return Ok(());
-			}
-		}
-		let is_bot = bot_room.is_some();
+	fn reject_with_reason(connection: transport::Connection, reason: &str) {
+		let _ = connection.outgoing.try_send(reconnect::bytes(stoc::Chat {
+			player: ygopro_data::constants::Color::Red.into(), msg: reason.into(),
+		}.into()));
+		Self::reject_connection(connection);
+	}
+
+	fn resume_connection(&self, connection: transport::Connection) -> Option<transport::Connection> {
 		let version: Option<u16> = reconnect::version(&connection);
 		let candidates: Vec<_> = self.resumes.values().filter(|handle| {
 			handle.available.load(std::sync::atomic::Ordering::Acquire)
@@ -239,20 +290,51 @@ impl Server {
 			if candidates.len() == 1 {
 				let handle = candidates[0];
 				if handle.available.swap(false, std::sync::atomic::Ordering::AcqRel) {
-					if handle.sender.try_send(connection).is_err() {
+					if let Err(error) = handle.sender.try_send(connection) {
 						handle.available.store(true, std::sync::atomic::Ordering::Release);
+						Self::reject_connection(error.into_inner());
 					}
+				} else {
+					Self::reject_connection(connection);
 				}
 			} else {
 				warn!("同 IP、名字和房间存在多个断线座位，拒绝不明确的重连");
 				Self::reject_connection(connection);
 			}
+			return None;
+		}
+		Some(connection)
+	}
+
+	fn accept_connection(&mut self, connection: transport::Connection, admission: Option<tournament::Admission>) -> Result<(), Error> {
+		if connection.outgoing.is_closed() { return Ok(()); }
+		let Some(mut connection) = self.resume_connection(connection) else { return Ok(()) };
+		let current = srvpro3_config::get()?.tournament.clone();
+		if admission.as_ref().is_some_and(|value| value.api.config != current && !self.rooms.contains_key(&value.room_id()))
+			|| (admission.is_none() && current.enabled && connection.handshake.pass.is_empty()) {
+			Self::reject_with_reason(connection, "赛事配置已更新，请重新连接");
 			return Ok(());
 		}
+		let bot_room = match bot::take_room(&connection) {
+			Ok(room) => room,
+			Err(_) => { Self::reject_connection(connection); return Ok(()); }
+		};
+		if let Some((room_id, record)) = &bot_room {
+			if admission.is_some() || !self.rooms.get(room_id).is_some_and(|room| Arc::ptr_eq(&room.record, record)) {
+				Self::reject_connection(connection);
+				return Ok(());
+			}
+		}
+		let is_bot = bot_room.is_some();
+		let version = reconnect::version(&connection);
 		let connection_id: u64 = self.next_connection_id;
 		self.next_connection_id = self.next_connection_id.wrapping_add(1);
 		
-		let options: password::Password = match password::Password::parse(&connection.handshake.pass) {
+		let parsed = match admission.as_ref() {
+			Some(value) => Ok(value.options.clone()),
+			None => password::Password::parse(&connection.handshake.pass),
+		};
+		let options: password::Password = match parsed {
 			Ok(options) => options,
 			Err(error) => {
 				warn!("拒绝不支持的房间模式：{error}");
@@ -260,19 +342,39 @@ impl Server {
 				return Ok(());
 			}
 		};
-		let room_id: String = bot_room.map(|(room_id, _)| room_id).or_else(|| options.room_key.clone()).unwrap_or_else(|| {
+		let room_id: String = admission.as_ref().map(tournament::Admission::room_id).or_else(|| bot_room.map(|(room_id, _)| room_id)).or_else(|| options.room_key.clone()).unwrap_or_else(|| {
 			self.random_room(&options.random_prefix(), options.capacity())
 		});
+		if let Some(room) = self.rooms.get(&room_id) {
+			let record = room.record.lock().unwrap();
+			let check = if let Some(value) = &admission {
+				value.check_room(&record, |id| self.resumes.contains_key(&id))
+			} else if record.tournament.is_some() {
+				Err(anyhow::anyhow!("比赛房间只能通过赛事匹配加入"))
+			} else { Ok(()) };
+			if let Err(error) = check {
+				Self::reject_with_reason(connection, &error.to_string());
+				return Ok(());
+			}
+		}
+		if let Some(value) = &admission {
+			if let Err(error) = value.prepare(&mut connection, connection_id) {
+				Self::reject_with_reason(connection, &error.to_string());
+				return Ok(());
+			}
+		}
 		let add_auto_bot: bool = options.auto_bot && !self.rooms.contains_key(&room_id);
 
 		let room_id_for_finish: String = room_id.clone();
-		let record_room_id: String = connection.handshake.pass.clone();
+		let record_room_id: String = if admission.is_some() { room_id.clone() } else { connection.handshake.pass.clone() };
 		let room: &mut RoomEntry = self.rooms.entry(room_id.clone()).or_insert_with(|| {
 			let record: Arc<Mutex<RoomRecord>> = Arc::new(Mutex::new(RoomRecord::new(record_room_id)));
 			record.lock().unwrap().team_size = (options.capacity() / 2) as u8;
 			record.lock().unwrap().side_timeout_secs = self.side_timeout_secs;
+			record.lock().unwrap().tournament = admission.as_ref().map(tournament::Admission::create_room);
 			let mut configuration: ygopro::Configuration = ygopro::Configuration::default();
 			options.configure(&mut configuration);
+			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));
 			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration { mode: ReplayMode::empty() });
@@ -312,6 +414,12 @@ impl Server {
 		};
 		if let Some(info) = added { rooms::added(info); }
 		let record = room.record.clone();
+		if let Some(value) = &admission {
+			let mut record = record.lock().unwrap();
+			let tournament = record.tournament.as_mut().unwrap();
+			tournament.seats[value.slot] = Some(connection_id);
+			tournament.decks[value.slot] = value.deck.clone();
+		}
 		record.lock().unwrap().players.insert(connection_id, PlayerRecord {
 			name: connection.handshake.name.clone(),
 			is_bot,

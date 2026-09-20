@@ -142,6 +142,7 @@ pub async fn reload() -> Result<(), Error> {
 	let ws_port: u16 = config.server.ws.port;
 	let reconnect_timeout: u64 = config.server.reconnect_timeout;
 	let side_timeout: u64 = config.server.side_timeout;
+	srvpro3_log::info!("比赛配置已加载：比赛 ID {}，BO{}", config.tournament.tournament_id, config.tournament.bo);
 	drop(config);
 
 	let mut running: AsyncMutexGuard<'_, Option<RunningServer>> = SERVER.lock().await;

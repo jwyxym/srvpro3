@@ -4,6 +4,7 @@ mod api;
 mod server;
 mod cards;
 mod windbot;
+mod tournament;
 
 pub use server::Server;
 
@@ -12,6 +13,7 @@ pub use redis::Redis;
 pub use api::{HttpApi, User, Permissions};
 pub use cards::{Cards, LFlist};
 pub use windbot::WindBot;
+pub use tournament::Tournament;
 
 use serde::{Deserialize, Serialize};
 
@@ -24,5 +26,6 @@ pub struct Config {
 	pub http_api: HttpApi,
 	pub redis: Redis,
 	pub cards: Cards,
-	pub windbot: WindBot
+	pub windbot: WindBot,
+	pub tournament: Tournament,
 }

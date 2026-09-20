@@ -23,12 +23,19 @@ pub async fn handshake(
 		if frame.first() == Some(&0x17) {
 			continue;
 		}
-		let message = decode(&frame).ok_or_else(|| match frame.first() {
+		let mut message = decode(&frame).ok_or_else(|| match frame.first() {
 			Some(opcode) => anyhow!("无效或不支持的握手消息：类型 0x{opcode:02X}，消息体 {} 字节", frame.len()),
 			None => anyhow!("握手消息体为空"),
 		})?;
-		match &message {
-			Message::PlayerInfo(value) => name = Some(value.name.to_string()),
+		match &mut message {
+			Message::PlayerInfo(value) => {
+				// $ 后面的扩展信息暂不使用；记录与转交引擎的名字必须保持一致。
+				let raw = value.name.to_string();
+				let display = raw.split_once('$').map_or(raw.as_str(), |(name, _)| name);
+				if display.is_empty() { bail!("玩家名称不能为空"); }
+				value.name = display.into();
+				name = Some(display.to_owned());
+			}
 			Message::JoinGame(value) => pass = Some(value.pass.to_string()),
 			_ => {}
 		}

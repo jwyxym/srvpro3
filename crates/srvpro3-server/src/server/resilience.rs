@@ -89,6 +89,7 @@ fn srvpro_side_timeout(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, con
 	let overdue: Vec<_> = duel.players.iter().enumerate()
 		.filter_map(|(slot, player)| player.as_ref().filter(|p| !p.ready).map(|_| slot as u8)).collect();
 	if overdue.is_empty() { return "continue"; }
+	if let Some(room) = config.0.lock().unwrap().tournament.as_mut() { room.aborted = true; }
 	duel.sender.send(stoc::Chat { player: Color::Red.into(), msg: "换副超时，房间已结束。".into() }.into(), SendTarget::All);
 	duel.sender.send(stoc::DuelEnd.into(), SendTarget::All);
 	config.0.lock().unwrap().stage = DuelStage::End;
@@ -99,6 +100,7 @@ fn srvpro_side_timeout(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, con
 #[register_to(COMMANDS as CommandHandler with &'static str)]
 fn srvpro_interrupt(duel: &mut Duel, _: &mut Box<dyn Any + Send>, config: RecordConfig, timer: &mut SideTimer) -> &'static str {
 	timer.stop();
+	if let Some(room) = config.0.lock().unwrap().tournament.as_mut() { room.aborted = true; }
 	duel.sender.send(stoc::Chat { player: Color::Red.into(), msg: "房间已被管理员中断。".into() }.into(), SendTarget::All);
 	// 等待开局的房间无需通知对局结束；猜拳、选先后手和换副仍属于已开局。
 	if matches!(duel.stage, DuelStage::Finger | DuelStage::Firstgo | DuelStage::Dueling | DuelStage::Siding) {

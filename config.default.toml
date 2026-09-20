@@ -42,6 +42,22 @@ port = 7913
 [server.ws]
 port = 7912
 
+[tournament]
+# 空密码按报名昵称和当前排表匹配；非空密码按房间号进入，赛事房间会校验参赛身份
+# 玩家名称仅使用 $ 前的部分，例如 昵称$111 显示并匹配为 昵称
+enabled = false
+url = "https://api-tabulator.moecube.com:444/api/srvpro"
+# 排表系统的 API Key，对应接口中的 api_key；不要提交真实 token
+token = ""
+tournament_id = 0
+bo = 3
+# 赛事房间号：BO1 为 对局ID，BO3 为 M#对局ID，其余为 BO局数#对局ID
+# 校验登记的 UpdateDeck Base64 卡组；启用时未登记卡组不能入房
+check_deck = true
+post_score = true
+# 接口超时（秒，1 到 60）；成绩失败最多尝试三次
+timeout = 5
+
 [cards]
 # 自动重载间隔（秒），默认 30 分钟，小于等于 0 为禁用
 reload = 1800

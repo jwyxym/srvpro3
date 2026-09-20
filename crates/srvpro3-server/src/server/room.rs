@@ -28,11 +28,12 @@ pub struct RoomRecord {
 	pub side_timeout_secs: u64,
 	pub engine: Option<tokio::sync::mpsc::WeakUnboundedSender<ygopro::duel::Request>>,
 	pub refreshing: BTreeSet<u8>,
+	pub tournament: Option<super::tournament::Room>,
 }
 
 impl RoomRecord {
 	pub fn new(room_id: String) -> Self {
-		Self { room_id, players: BTreeMap::new(), duels: BTreeMap::new(), accepted_decks: BTreeMap::new(), current_history: None, history: Vec::new(), chats: VecDeque::new(), team_size: 1, stage: DuelStage::Begin, side_timeout_secs: 180, engine: None, refreshing: BTreeSet::new() }
+		Self { room_id, players: BTreeMap::new(), duels: BTreeMap::new(), accepted_decks: BTreeMap::new(), current_history: None, history: Vec::new(), chats: VecDeque::new(), team_size: 1, stage: DuelStage::Begin, side_timeout_secs: 180, engine: None, refreshing: BTreeSet::new(), tournament: None }
 	}
 
 	// 调用时先锁记录，再锁列表；只更新仍存在的房间，避免结束后重新插入。

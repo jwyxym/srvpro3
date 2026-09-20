@@ -23,7 +23,7 @@ pub fn bytes(message: stoc::Message) -> Vec<u8> {
 	message.data.to_vec()
 }
 
-fn same_deck(left: &Deck, right: &Deck) -> bool {
+pub fn same_deck(left: &Deck, right: &Deck) -> bool {
 	// CTOS 中主卡组和额外卡组是合并传输的；保留副卡组边界，忽略排列顺序。
 	fn sorted(deck: &Deck) -> (Vec<u32>, Vec<u32>) {
 		let mut main: Vec<_> = deck.main.iter().chain(&deck.extra).copied().collect();
@@ -112,7 +112,13 @@ pub async fn run(
 		}
 		tokio::select! {
 			message = engine_output.next() => {
-				let Some(message) = message else { break };
+				let Some(mut message) = message else { break };
+				if record.lock().unwrap().tournament.is_some() {
+					// 赛事由服务器自动开局，主持人转移及重连时也不向客户端授予房主权限。
+					if let Ok(stoc::Message::TypeChange(value)) = message.try_get() {
+						message = Complex::from_message(stoc::TypeChange { player: value.player, host: false }.into());
+					}
+				}
 				let mut leave_position = None;
 				if let Ok(value) = message.try_get() {
 					match value {
@@ -208,6 +214,10 @@ pub async fn run(
 					continue;
 				}
 				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
+				if record.lock().unwrap().tournament.is_some() && super::tournament::blocked_input(&message) {
+					let _ = socket.outgoing.try_send(bytes(stoc::Chat { player: Color::Red.into(), msg: "比赛房间不允许更改座位、踢人或手动开局。".into() }.into()));
+					continue;
+				}
 				if let ctos::Message::Chat(chat) = &message {
 					if super::bot::command(&chat.msg, &record, &room_id, id) { continue; }
 				}

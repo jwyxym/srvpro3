@@ -22,6 +22,7 @@ pub fn take_room(connection: &Connection) -> Result<Option<(String, Arc<Mutex<Ro
 }
 
 fn check_room(record: &RoomRecord) -> Result<(), Error> {
+	ensure!(record.tournament.is_none(), "比赛房间不允许添加机器人");
 	ensure!(record.stage == DuelStage::Begin, "只能在等待开局时添加机器人");
 	let players = record.players.values().filter(|player| player.connected && matches!(player.position, Netplayer::Player(_))).count();
 	ensure!(players < usize::from(record.team_size) * 2, "房间没有空余对战席位");

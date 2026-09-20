@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow, bail, ensure};
 use ygopro_data::{constants::{MasterRule, Mode, Rule}, message::HostInfo};
 
+#[derive(Clone)]
 pub struct Password {
 	pub room_key: Option<String>,
 	pub host_info: HostInfo,
