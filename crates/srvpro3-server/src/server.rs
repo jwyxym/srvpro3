@@ -199,13 +199,18 @@ impl Server {
 			Ok(options) => options,
 			Err(error) => {
 				warn!("拒绝不支持的房间模式：{error}");
-				let _ = connection.outgoing.try_send(reconnect::bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()));
+				if connection.protocol == transport::Protocol::Udp {
+					let _ = connection.outgoing.try_send(reconnect::bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()));
+				}
+				let _ = connection.close.send(());
 				return Ok(());
 			}
 		};
 		let room_id: String = options.room_key.clone().unwrap_or_else(|| {
 			self.random_room(&options.random_prefix(), options.capacity())
 		});
+		let add_auto_bot: bool = options.auto_bot && !self.rooms.contains_key(&room_id);
+		let bot_password: String = connection.handshake.pass.clone();
 
 		let room_id_for_finish: String = room_id.clone();
 		let record_room_id: String = connection.handshake.pass.clone();
@@ -292,6 +297,37 @@ impl Server {
 				record, room_list, room_id.clone(), connection_id, seconds).await;
 			let _ = disconnected_tx.send((room_id, connection_id));
 		});
+		if add_auto_bot {
+			let tcp_port: u16 = srvpro3_config::get()?.server.tcp.port;
+			tokio::spawn(async move {
+				let selected = match tokio::task::spawn_blocking(srvpro3_windbot::random).await {
+					Ok(Ok(bot)) => bot,
+					Ok(Err(error)) => {
+						error!("获取随机 WindBot 失败：{error:#}");
+						return;
+					}
+					Err(error) => {
+						error!("获取随机 WindBot 任务失败：{error}");
+						return;
+					}
+				};
+				let bot = srvpro3_windbot::Bot {
+					name: selected.name,
+					deck: selected.ai_name,
+					host: "127.0.0.1".to_owned(),
+					port: tcp_port,
+					password: bot_password,
+					dialog: Some(selected.dialog),
+					version: None,
+					hand: None,
+					debug: false,
+					chat: true,
+				};
+				if let Err(error) = srvpro3_windbot::add(bot).await {
+					error!("添加随机 WindBot 失败：{error:#}");
+				}
+			});
+		}
 		Ok(())
 	}
 

@@ -8,6 +8,8 @@ libloading.workspace = true
 log.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 srvpro3-config.workspace = true
 srvpro3-log.workspace = true

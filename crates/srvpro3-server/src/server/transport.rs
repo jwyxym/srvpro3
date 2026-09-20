@@ -5,7 +5,7 @@ pub mod udp;
 use std::{net::IpAddr, pin::Pin, time::Duration};
 use anyhow::{Context, Result, ensure, Error};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use tokio::{net::TcpListener, sync::mpsc, task::JoinSet, time::timeout};
+use tokio::{net::TcpListener, sync::{mpsc, oneshot}, task::JoinSet, time::timeout};
 use tokio_kcp::KcpListener;
 use ygopro_data::message::ctos;
 use super::handshake::{self, Handshake};
@@ -32,6 +32,7 @@ pub struct Connection {
 	pub initial: Vec<ctos::Message>,
 	pub incoming: mpsc::Receiver<Vec<u8>>,
 	pub outgoing: mpsc::Sender<Vec<u8>>,
+	pub close: oneshot::Sender<()>,
 }
 
 pub struct Listeners {
@@ -88,13 +89,24 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 		.context("业务握手失败")?;
 	let (incoming_tx, incoming) = mpsc::channel(QUEUE);
 	let (outgoing, mut outgoing_rx) = mpsc::channel(QUEUE);
-	timeout(TIMEOUT, ready.send(Connection { peer_ip, protocol, handshake, initial, incoming, outgoing })).await
+	let (close, mut close_rx) = oneshot::channel();
+	timeout(TIMEOUT, ready.send(Connection { peer_ip, protocol, handshake, initial, incoming, outgoing, close })).await
 		.context("提交进房请求超时（10 秒）")?
 		.context("房间服务接收通道已关闭")?;
 	let result: Result<()> = async {
 		let mut accepting_input = true;
+		let mut close_observed = false;
 		loop {
 			tokio::select! {
+				close = &mut close_rx, if !close_observed => {
+					close_observed = true;
+					if close.is_ok() {
+						while let Ok(frame) = outgoing_rx.try_recv() {
+							timeout(TIMEOUT, output.send(frame)).await??;
+						}
+						break;
+					}
+				}
 				frame = async {
 					if let Some(duration) = idle {
 						timeout(duration, input.next()).await.map_err(Error::from)

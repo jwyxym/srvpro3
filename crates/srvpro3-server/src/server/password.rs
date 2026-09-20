@@ -5,12 +5,13 @@ pub struct Password {
 	pub room_key: Option<String>,
 	pub host_info: HostInfo,
 	pub best_of: u8,
+	pub auto_bot: bool,
 }
 
 fn lflist(index: i64) -> Result<u32> {
-	if index == -1 { return Ok(u32::MAX); }
-	let index = usize::try_from(index).map_err(|_| anyhow!("禁限卡表编号无效"))?;
-	srvpro3_cards::lflist_by_index(index)
+	if index == 0 { return Ok(0); }
+	let index: usize = usize::try_from(index).map_err(|_| anyhow!("禁限卡表编号无效"))?;
+	srvpro3_cards::lflist_by_index(index - 1)
 }
 
 fn master_rule(value: u8) -> Result<MasterRule> {
@@ -31,8 +32,8 @@ fn number(value: &str, name: &str) -> Result<u32> {
 
 fn lflist_number(value: &str) -> Result<i64> {
 	ensure!(
-		!value.is_empty() && (value == "-1" || value.bytes().all(|value| value.is_ascii_digit())),
-		"禁限卡表编号必须为非负整数或 -1"
+		!value.is_empty() && value.bytes().all(|value| value.is_ascii_digit()),
+		"禁限卡表编号必须为非负整数"
 	);
 	value.parse().map_err(Into::into)
 }
@@ -40,12 +41,14 @@ fn lflist_number(value: &str) -> Result<i64> {
 impl Password {
 	pub fn parse(pass: &str) -> Result<Self> {
 		let (prefix, name) = pass.rsplit_once('#').unwrap_or(("", pass));
-		let prefix = prefix.to_uppercase();
+		let prefix: String = prefix.to_uppercase();
 		let modes: Vec<&str> = prefix.split([',', '，']).map(str::trim).filter(|mode| !mode.is_empty()).collect();
-		let defaults = srvpro3_config::get()?.server.clone();
+		let config = srvpro3_config::get()?;
+		let defaults: srvpro3_config::Server = config.server.clone();
+		drop(config);
 		let mut host_info = HostInfo {
 			mode: Mode::Single,
-			lflist: lflist(defaults.lflist)?,
+			lflist: lflist(defaults.lflist + 1)?,
 			rule: defaults.ot,
 			no_shuffle_deck: !defaults.shuffle,
 			duel_rule: master_rule(defaults.master_rule)?,
@@ -55,13 +58,18 @@ impl Password {
 			start_lp: defaults.start_lp.clamp(1, 99_999),
 			..HostInfo::default()
 		};
-		let mut best_of = defaults.bo;
+	let mut best_of = defaults.bo;
+	let mut auto_bot = false;
 		ensure!(best_of > 0 && best_of < 255 && best_of % 2 == 1, "默认BO局数必须为 1 到 253 的奇数");
 		if modes.iter().any(|mode| matches!(*mode, "M" | "MATCH")) { best_of = 3; }
 
 		for mode in &modes {
-			match *mode {
-				"M" | "MATCH" | "T" | "TAG" => continue,
+		match *mode {
+			"M" | "MATCH" | "T" | "TAG" => continue,
+			"AI" => {
+				auto_bot = true;
+				continue;
+			}
 				"TCG" | "OT" => {
 					host_info.rule = Rule::All;
 					continue;
@@ -71,7 +79,7 @@ impl Password {
 					continue;
 				}
 				"NOLFLIST" | "NF" => {
-					host_info.lflist = lflist(-1)?;
+					host_info.lflist = lflist(0)?;
 					continue;
 				}
 				"NOUNIQUE" | "NU" => {
@@ -108,6 +116,11 @@ impl Password {
 				host_info.duel_rule = master_rule(number(value, "大师规则版本")? as u8)?;
 			}
 		}
+		if auto_bot {
+			// AI 房统一使用无禁限卡表；HostInfo 会将此哈希发送给客户端。
+			host_info.lflist = lflist(0)?;
+			host_info.no_check_deck = false;
+		}
 
 		let tag = modes.iter().any(|mode| matches!(*mode, "T" | "TAG"));
 		if tag {
@@ -125,7 +138,7 @@ impl Password {
 		} else {
 			Some(name.to_owned())
 		};
-		Ok(Self { room_key, host_info, best_of })
+		Ok(Self { room_key, host_info, best_of, auto_bot })
 	}
 
 	pub fn configure(&self, configuration: &mut ygopro::Configuration) {
@@ -153,7 +166,9 @@ impl Password {
 			self.host_info.start_hand,
 			self.host_info.draw_count,
 			self.host_info.time_limit,
-			u8::from(self.host_info.no_check_deck) | (u8::from(self.host_info.no_shuffle_deck) << 1),
+			u8::from(self.host_info.no_check_deck)
+				| (u8::from(self.host_info.no_shuffle_deck) << 1)
+				| (u8::from(self.auto_bot) << 2),
 		)
 	}
 }

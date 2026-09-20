@@ -102,6 +102,14 @@ pub fn reload_cards() -> Result<(), Error> {
 	}
 	data_manager.finalize_db();
 	let mut deck_manager = DeckManager::new();
+	// 第 0 项保留给无禁限卡表，使 HostInfo.lflist = 0 下发的哈希也为 0。
+	deck_manager.lflists.push(LFList {
+		hash: 0,
+		name: "无禁限".to_owned(),
+		content: Default::default(),
+		genesys: 0,
+		glist: Default::default()
+	});
 	for (name, lflist) in &cards.lflists {
 		deck_manager.lflists.push(LFList {
 			hash: lflist.hash,
