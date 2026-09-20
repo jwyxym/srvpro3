@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            artifact: linux-x86_64
+            binary: srvpro3
+            windbot: windbot-linux-x64.zip
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            artifact: linux-arm64
+            binary: srvpro3
+            windbot: windbot-linux-arm64.zip
+          - name: macOS x86_64
+            os: macos-15-intel
+            artifact: macos-x86_64
+            binary: srvpro3
+            windbot: windbot-macos-universal.zip
+          - name: macOS arm64
+            os: macos-15
+            artifact: macos-arm64
+            binary: srvpro3
+            windbot: windbot-macos-universal.zip
+          - name: Windows x86_64
+            os: windows-latest
+            artifact: windows-x86_64
+            binary: srvpro3.exe
+            windbot: windbot-win-x64.zip
+          - name: Windows arm64
+            os: windows-11-arm
+            artifact: windows-arm64
+            binary: srvpro3.exe
+            windbot: windbot-win-arm64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build release binary
+        run: cargo build --release -p srvpro3
+
+      - name: Package
+        shell: pwsh
+        env:
+          BINARY: ${{ matrix.binary }}
+          ARTIFACT: ${{ matrix.artifact }}
+          WINDBOT: ${{ matrix.windbot }}
+        run: |
+          $version = ($env:GITHUB_REF_NAME).TrimStart('v')
+          $bundle = "dist/srvpro3-$version-$env:ARTIFACT"
+          $archive = "srvpro3-$version-$env:ARTIFACT.zip"
+          New-Item -ItemType Directory -Force -Path "$bundle/windbot" | Out-Null
+          Copy-Item "target/release/$env:BINARY" $bundle
+          Copy-Item config.default.toml $bundle
+          Invoke-WebRequest -Uri "https://github.com/jwyxym/windbot/releases/download/release-latest/$env:WINDBOT" -OutFile windbot.zip
+          Expand-Archive -Path windbot.zip -DestinationPath "$bundle/windbot"
+          Compress-Archive -Path "$bundle/*" -DestinationPath $archive
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ env.archive }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish tagged release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+
+      - name: Delete previous release-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view release-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete release-latest --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/release-latest" >/dev/null 2>&1; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/release-latest"
+          fi
+
+      - name: Publish release-latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-latest
+          name: release-latest
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: artifacts/**/*.zip
