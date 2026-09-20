@@ -36,6 +36,18 @@ pub fn get() -> Result<Arc<CardsSnapshot>, Error> {
 	Ok(snapshot.read().clone())
 }
 
+pub fn lflist_by_index(index: usize) -> Result<u32, Error> {
+	get()?.lflists.get_index(index)
+		.map(|(_, lflist)| lflist.hash)
+		.ok_or_else(|| anyhow::anyhow!("禁限卡表编号不存在"))
+}
+
+pub fn lflist_by_name(name: &str) -> Result<u32, Error> {
+	get()?.lflists.get(name)
+		.map(|lflist| lflist.hash)
+		.ok_or_else(|| anyhow::anyhow!("禁限卡表不存在：{name}"))
+}
+
 fn replace(snapshot: CardsSnapshot) -> Result<(), Error> {
 	let snapshot: Arc<CardsSnapshot> = Arc::new(snapshot);
 	if let Some(current) = SNAPSHOT.get() {

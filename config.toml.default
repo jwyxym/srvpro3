@@ -20,8 +20,16 @@ history = true
 user = { password = "", permissions = 3 }
 
 [server]
-reconnect_timeout_secs = 180
-side_timeout_secs = 180
+reconnect_timeout = 180
+side_timeout = 180
+bo = 1
+lflist = -1
+shuffle = true
+master_rule = 5
+draw_count = 1
+start_hand = 5
+time_limit = 180
+start_lp = 8000
 
 [server.tcp]
 port = 7911

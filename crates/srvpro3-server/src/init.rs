@@ -130,8 +130,8 @@ pub async fn init() -> Result<(), Error> {
 	let tcp_port: u16 = config.server.tcp.port;
 	let udp_port: u16 = config.server.udp.port;
 	let ws_port: u16 = config.server.ws.port;
-	let reconnect_timeout: u64 = config.server.reconnect_timeout_secs;
-	let side_timeout: u64 = config.server.side_timeout_secs;
+	let reconnect_timeout: u64 = config.server.reconnect_timeout;
+	let side_timeout: u64 = config.server.side_timeout;
 	drop(config);
 	let server: Server = Server::bind(
 		tcp_port,

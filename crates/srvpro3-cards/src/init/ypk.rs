@@ -49,7 +49,6 @@ pub fn read<P: AsRef<Path>>(snapshot: &mut CardsSnapshot, i: P) -> Result<(), Er
 			}
 		}
 	}
-	println!("{:?}", script);
 	snapshot.packs.push(YPK { archive: Mutex::new(archive), script });
 	Ok(())
 }

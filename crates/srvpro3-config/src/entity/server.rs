@@ -6,8 +6,18 @@ pub struct Server {
 	pub tcp: Protocol,
 	pub udp: Protocol,
 	pub ws: WebSocket,
-	pub reconnect_timeout_secs: u64,
-	pub side_timeout_secs: u64
+	pub bo: u8,
+	pub lflist: i64,
+	pub shuffle: bool,
+	pub master_rule: u8,
+	pub draw_count: u8,
+	pub start_hand: u8,
+	pub time_limit: u16,
+	pub start_lp: u32,
+	#[serde(alias = "reconnect_timeout_secs")]
+	pub reconnect_timeout: u64,
+	#[serde(alias = "side_timeout_secs")]
+	pub side_timeout: u64
 }
 
 impl Default for Server {
@@ -16,8 +26,16 @@ impl Default for Server {
 			tcp: Protocol::default(),
 			udp: Protocol::default(),
 			ws: WebSocket::default(),
-			reconnect_timeout_secs: 180,
-			side_timeout_secs: 180,
+			bo: 1,
+			lflist: -1,
+			shuffle: true,
+			master_rule: 5,
+			draw_count: 1,
+			start_hand: 5,
+			time_limit: 180,
+			start_lp: 8000,
+			reconnect_timeout: 180,
+			side_timeout: 180,
 		}
 	}
 }
