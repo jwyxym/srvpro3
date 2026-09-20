@@ -41,19 +41,29 @@ fn connected(record: &Arc<Mutex<RoomRecord>>, rooms: &RoomList, room: &str, id: 
 	record.update_info(rooms, room);
 }
 
-fn notify_udp_kick(record: &Arc<Mutex<RoomRecord>>, kicker: u64, target: Netplayer) {
+fn disconnect_kicked_player(record: &Arc<Mutex<RoomRecord>>, kicker: u64, target: Netplayer) {
 	let Netplayer::Player(_) = target else { return };
-	let outgoing = {
-		let record = record.lock().unwrap();
+	let player = {
+		let mut record = record.lock().unwrap();
 		if record.stage != DuelStage::Begin || !record.players.get(&kicker).is_some_and(|player| player.is_host) {
 			return;
 		}
-		record.players.values().find(|player| {
-			player.connected && player.position == target && player.protocol == Protocol::Udp
-		}).map(|player| player.outgoing.clone())
+		record.players.values_mut().find(|player| {
+			player.connected && player.position == target
+		}).map(|player| {
+			if player.protocol == Protocol::Udp {
+				(player.protocol, player.outgoing.clone(), None)
+			} else {
+				(player.protocol, player.outgoing.clone(), player.close.take())
+			}
+		})
 	};
-	if let Some(outgoing) = outgoing {
-		let _ = outgoing.try_send(bytes(stoc::LeaveGame { pos: target }.into()));
+	if let Some((protocol, outgoing, close)) = player {
+		if protocol == Protocol::Udp {
+			let _ = outgoing.try_send(bytes(stoc::LeaveGame { pos: target }.into()));
+		} else if let Some(close) = close {
+			let _ = close.send(());
+		}
 	}
 }
 
@@ -61,6 +71,7 @@ struct Live {
 	incoming: mpsc::Receiver<Vec<u8>>,
 	outgoing: mpsc::Sender<Vec<u8>>,
 	protocol: Protocol,
+	close: Option<tokio::sync::oneshot::Sender<()>>,
 	verified: bool,
 }
 
@@ -77,7 +88,7 @@ pub async fn run(
 	id: u64,
 	seconds: u64,
 ) {
-	let mut live = Some(Live { incoming: connection.incoming, outgoing: connection.outgoing, protocol: connection.protocol, verified: true });
+	let mut live = Some(Live { incoming: connection.incoming, outgoing: connection.outgoing, protocol: connection.protocol, close: None, verified: true });
 	let mut deadline = None;
 	let mut join_packet = None;
 	let mut type_packet = None;
@@ -155,9 +166,10 @@ pub async fn run(
 				let (Some(join), Some(kind)) = (&join_packet, &type_packet) else { break };
 				let protocol = candidate.protocol;
 				let outgoing = candidate.outgoing;
+				let close = candidate.close;
 				if outgoing.try_send(join.clone()).is_err() || outgoing.try_send(kind.clone()).is_err() { continue; }
 				let _ = outgoing.try_send(bytes(stoc::Chat { player: Color::Lightblue.into(), msg: "检测到断线座位，请提交原卡组以验证重连。".into() }.into()));
-				live = Some(Live { incoming: candidate.incoming, outgoing, protocol, verified: false });
+				live = Some(Live { incoming: candidate.incoming, outgoing, protocol, close, verified: false });
 			}
 			frame = async { live.as_mut().unwrap().incoming.recv().await }, if live.is_some() => {
 				let Some(frame) = frame else { live = None; continue; };
@@ -188,20 +200,22 @@ pub async fn run(
 					if let Some(player) = record.lock().unwrap().players.get_mut(&id) {
 						player.protocol = socket.protocol;
 						player.outgoing = socket.outgoing.clone();
+						player.close = socket.close.take();
 					}
 					connected(&record, &rooms, &room_id, id, true);
 					continue;
 				}
 				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
-				if let ctos::Message::HsKick(kick) = &message {
-					notify_udp_kick(&record, id, kick.pos);
-				}
+				let kicked = if let ctos::Message::HsKick(kick) = &message { Some(kick.pos) } else { None };
 				{
 					let mut record = record.lock().unwrap();
 					record.observe_input(id, &message);
 					if matches!(message, ctos::Message::Chat(_)) { record.update_info(&rooms, &room_id); }
 				}
 				if engine_input.try_send(message).is_err() { break; }
+				if let Some(target) = kicked {
+					disconnect_kicked_player(&record, id, target);
+				}
 			}
 		}
 	}

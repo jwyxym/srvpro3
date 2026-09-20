@@ -14,7 +14,7 @@ use player::PlayerRecord;
 
 use super::rooms;
 
-use std::{collections::BTreeMap, sync::{Arc, Mutex, atomic::AtomicBool}};
+use std::{collections::BTreeMap, sync::{Arc, Mutex, atomic::AtomicBool}, time::Duration};
 use parking_lot::{RawRwLock, lock_api::RwLock};
 use anyhow::Error;
 use futures::stream;
@@ -26,7 +26,7 @@ use tokio::{
 use ygopro::host::DuelHost;
 use ygopro_data::{
 	data::ReplayMode,
-	constants::{CorePlayer, Netplayer},
+	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer},
 	message::{ctos, stoc, gm},
 	complex::Complex
 };
@@ -172,7 +172,24 @@ impl Server {
 		engine.send(ygopro::duel::Request::Command { name: "srvpro_interrupt", arguments: None }).is_ok()
 	}
 
-	fn accept_connection(&mut self, connection: transport::Connection) -> Result<(), Error> {
+	fn reject_connection(mut connection: transport::Connection) {
+		if connection.protocol == transport::Protocol::Udp {
+			let _ = connection.outgoing.try_send(reconnect::bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()));
+			if let Some(close) = connection.close.take() {
+				spawn(async move {
+					tokio::time::sleep(Duration::from_millis(200)).await;
+					let _ = close.send(());
+				});
+			}
+		} else {
+			let _ = connection.outgoing.try_send(reconnect::bytes(stoc::ErrorMessage {
+				err: ErrorMessage::JoinError(JoinError::HostRefused),
+			}.into()));
+			if let Some(close) = connection.close.take() { let _ = close.send(()); }
+		}
+	}
+
+	fn accept_connection(&mut self, mut connection: transport::Connection) -> Result<(), Error> {
 		let version: Option<u16> = reconnect::version(&connection);
 		let candidates: Vec<_> = self.resumes.values().filter(|handle| {
 			handle.available.load(std::sync::atomic::Ordering::Acquire)
@@ -189,6 +206,7 @@ impl Server {
 				}
 			} else {
 				warn!("同 IP、名字和房间存在多个断线座位，拒绝不明确的重连");
+				Self::reject_connection(connection);
 			}
 			return Ok(());
 		}
@@ -199,10 +217,7 @@ impl Server {
 			Ok(options) => options,
 			Err(error) => {
 				warn!("拒绝不支持的房间模式：{error}");
-				if connection.protocol == transport::Protocol::Udp {
-					let _ = connection.outgoing.try_send(reconnect::bytes(stoc::LeaveGame { pos: Netplayer::Unknown }.into()));
-				}
-				let _ = connection.close.send(());
+				Self::reject_connection(connection);
 				return Ok(());
 			}
 		};
@@ -265,6 +280,7 @@ impl Server {
 			connected: true,
 			protocol: connection.protocol,
 			outgoing: connection.outgoing.clone(),
+			close: connection.close.take(),
 			deck: None,
 			reconnect_deck: None,
 		});

@@ -32,7 +32,7 @@ pub struct Connection {
 	pub initial: Vec<ctos::Message>,
 	pub incoming: mpsc::Receiver<Vec<u8>>,
 	pub outgoing: mpsc::Sender<Vec<u8>>,
-	pub close: oneshot::Sender<()>,
+	pub close: Option<oneshot::Sender<()>>,
 }
 
 pub struct Listeners {
@@ -90,7 +90,7 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 	let (incoming_tx, incoming) = mpsc::channel(QUEUE);
 	let (outgoing, mut outgoing_rx) = mpsc::channel(QUEUE);
 	let (close, mut close_rx) = oneshot::channel();
-	timeout(TIMEOUT, ready.send(Connection { peer_ip, protocol, handshake, initial, incoming, outgoing, close })).await
+	timeout(TIMEOUT, ready.send(Connection { peer_ip, protocol, handshake, initial, incoming, outgoing, close: Some(close) })).await
 		.context("提交进房请求超时（10 秒）")?
 		.context("房间服务接收通道已关闭")?;
 	let result: Result<()> = async {

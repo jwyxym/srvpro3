@@ -1,4 +1,4 @@
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use ygopro_data::{data::Deck, constants::Netplayer};
 use super::transport::Protocol;
 
@@ -10,6 +10,7 @@ pub struct PlayerRecord {
 	pub connected: bool,
 	pub protocol: Protocol,
 	pub outgoing: mpsc::Sender<Vec<u8>>,
+	pub close: Option<oneshot::Sender<()>>,
 	pub deck: Option<Deck>,
 	pub reconnect_deck: Option<Deck>,
 }
