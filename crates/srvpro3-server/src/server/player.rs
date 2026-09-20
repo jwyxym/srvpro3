@@ -5,6 +5,8 @@ use super::transport::Protocol;
 #[derive(Debug)]
 pub struct PlayerRecord {
 	pub name: String,
+	/// 仅通过服务器的一次性 WindBot 邀请验证后标记，不依赖玩家名字。
+	pub is_bot: bool,
 	pub position: Netplayer,
 	pub is_host: bool,
 	pub connected: bool,

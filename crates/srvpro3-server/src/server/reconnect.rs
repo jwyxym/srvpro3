@@ -101,7 +101,7 @@ pub async fn run(
 				let eligible = {
 					let record = record.lock().unwrap();
 					closing.is_none() && seconds > 0 && record.stage == DuelStage::Dueling
-						&& record.players.get(&id).is_some_and(|player| matches!(player.position, Netplayer::Player(_)) && player.reconnect_deck.is_some())
+						&& record.players.get(&id).is_some_and(|player| !player.is_bot && matches!(player.position, Netplayer::Player(_)) && player.reconnect_deck.is_some())
 				};
 				if !eligible { break; }
 				deadline = Instant::now().checked_add(Duration::from_secs(seconds));
@@ -208,6 +208,9 @@ pub async fn run(
 					continue;
 				}
 				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
+				if let ctos::Message::Chat(chat) = &message {
+					if super::bot::command(&chat.msg, &record, &room_id, id) { continue; }
+				}
 				let kicked = if let ctos::Message::HsKick(kick) = &message { Some(kick.pos) } else { None };
 				{
 					let mut record = record.lock().unwrap();

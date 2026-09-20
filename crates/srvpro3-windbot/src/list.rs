@@ -53,14 +53,30 @@ pub fn list() -> Result<Vec<BotInfo>, Error> {
 
 /// 随机选择一个非 Lucky 的 WindBot。
 pub fn random() -> Result<BotInfo, Error> {
-	let mut bots: Vec<BotInfo> = list()?.into_iter()
+	let bots: Vec<BotInfo> = list()?.into_iter()
 		.filter(|bot| bot.ai_name != "Lucky")
 		.collect();
 	ensure!(!bots.is_empty(), "WindBot 没有可用的随机 Bot");
+	Ok(random_from(bots))
+}
+
+/// 按完整名称、AIName 或名称中连字符分隔的部分匹配，并从结果中随机选择。
+pub fn select(name: &str) -> Result<BotInfo, Error> {
+	let name = name.trim();
+	if name.is_empty() { return random(); }
+	let bots = list()?.into_iter().filter(|bot| {
+		bot.name.trim() == name || bot.ai_name.eq_ignore_ascii_case(name)
+			|| bot.name.split('-').any(|part| part.trim() == name)
+	}).collect::<Vec<_>>();
+	ensure!(!bots.is_empty(), "未找到机器人：{name}");
+	Ok(random_from(bots))
+}
+
+fn random_from(mut bots: Vec<BotInfo>) -> BotInfo {
 	let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
 	let mut hasher = RandomState::new().build_hasher();
 	time.hash(&mut hasher);
 	NEXT.fetch_add(1, Ordering::Relaxed).hash(&mut hasher);
 	let index = (hasher.finish() as usize) % bots.len();
-	Ok(bots.swap_remove(index))
+	bots.swap_remove(index)
 }

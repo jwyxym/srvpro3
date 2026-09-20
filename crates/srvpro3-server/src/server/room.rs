@@ -7,6 +7,7 @@ use crate::rooms::{RoomList, RoomPlayer, ChatInfo};
 pub struct RoomEntry {
 	pub host: DuelHost,
 	pub connections: usize,
+	pub bot_only_since: Option<tokio::time::Instant>,
 	pub record: Arc<Mutex<RoomRecord>>,
 }
 

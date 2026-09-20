@@ -8,6 +8,7 @@ mod player;
 mod transport;
 mod reconnect;
 mod resilience;
+mod bot;
 
 use room::{RoomEntry, RoomRecord};
 use player::PlayerRecord;
@@ -26,7 +27,7 @@ use tokio::{
 use ygopro::host::DuelHost;
 use ygopro_data::{
 	data::ReplayMode,
-	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer},
+	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer, DuelStage},
 	message::{ctos, stoc, gm},
 	complex::Complex
 };
@@ -103,8 +104,11 @@ impl Server {
 			let _ = shutdown.await;
 			return Ok(());
 		}
+		let mut bot_cleanup = tokio::time::interval(Duration::from_secs(1));
+		bot_cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 		loop {
 			tokio::select! {
+				_ = bot_cleanup.tick() => self.close_bot_only_rooms(),
 				_ = &mut shutdown => {
 					self.leave_udp_clients().await;
 					return Ok(());
@@ -137,6 +141,7 @@ impl Server {
 						room.connections = room.connections.saturating_sub(1);
 						room.record.lock().unwrap().update_info(&self.room_list, &room_id);
 					}
+					self.close_bot_only_rooms();
 				}
 				Some(request) = self.interrupt_rx.recv() => {
 					let _ = request.result.send(self.interrupt_room(&request.room_id));
@@ -165,6 +170,29 @@ impl Server {
 		tokio::task::yield_now().await;
 	}
 
+	fn close_bot_only_rooms(&mut self) {
+		for (room_id, room) in &mut self.rooms {
+			let record = room.record.lock().unwrap();
+			let has_bot = record.players.values().any(|player| player.is_bot && player.connected);
+			let waiting = record.stage == DuelStage::Begin;
+			// 等待房间只检查在线真人；开局后还要保护未结束的重连任务。
+			let has_human = record.players.iter().any(|(id, player)| {
+				!player.is_bot && (player.connected || (!waiting && self.resumes.contains_key(id)))
+			});
+			if !has_bot || has_human {
+				room.bot_only_since = None;
+				continue;
+			}
+			let since = room.bot_only_since.get_or_insert_with(tokio::time::Instant::now);
+			if !waiting && since.elapsed() < Duration::from_secs(5) { continue; }
+			if let Some(engine) = record.engine.as_ref().and_then(|engine| engine.upgrade()) {
+				if engine.send(ygopro::duel::Request::Command { name: "srvpro_interrupt", arguments: None }).is_ok() {
+					room.bot_only_since = Some(tokio::time::Instant::now());
+				}
+			}
+		}
+	}
+
 	fn interrupt_room(&mut self, room_id: &str) -> bool {
 		let Some(room) = self.rooms.get(room_id) else { return false };
 		let engine = room.record.lock().unwrap().engine.as_ref().and_then(|engine| engine.upgrade());
@@ -190,6 +218,17 @@ impl Server {
 	}
 
 	fn accept_connection(&mut self, mut connection: transport::Connection) -> Result<(), Error> {
+		let bot_room = match bot::take_room(&connection) {
+			Ok(room) => room,
+			Err(_) => { Self::reject_connection(connection); return Ok(()); }
+		};
+		if let Some((room_id, record)) = &bot_room {
+			if !self.rooms.get(room_id).is_some_and(|room| Arc::ptr_eq(&room.record, record)) {
+				Self::reject_connection(connection);
+				return Ok(());
+			}
+		}
+		let is_bot = bot_room.is_some();
 		let version: Option<u16> = reconnect::version(&connection);
 		let candidates: Vec<_> = self.resumes.values().filter(|handle| {
 			handle.available.load(std::sync::atomic::Ordering::Acquire)
@@ -221,11 +260,10 @@ impl Server {
 				return Ok(());
 			}
 		};
-		let room_id: String = options.room_key.clone().unwrap_or_else(|| {
+		let room_id: String = bot_room.map(|(room_id, _)| room_id).or_else(|| options.room_key.clone()).unwrap_or_else(|| {
 			self.random_room(&options.random_prefix(), options.capacity())
 		});
 		let add_auto_bot: bool = options.auto_bot && !self.rooms.contains_key(&room_id);
-		let bot_password: String = connection.handshake.pass.clone();
 
 		let room_id_for_finish: String = room_id.clone();
 		let record_room_id: String = connection.handshake.pass.clone();
@@ -250,6 +288,7 @@ impl Server {
 			RoomEntry {
 				host,
 				connections: 0,
+				bot_only_since: None,
 				record,
 			}
 		});
@@ -275,6 +314,7 @@ impl Server {
 		let record = room.record.clone();
 		record.lock().unwrap().players.insert(connection_id, PlayerRecord {
 			name: connection.handshake.name.clone(),
+			is_bot,
 			position: Netplayer::Unknown,
 			is_host: false,
 			connected: true,
@@ -308,42 +348,15 @@ impl Server {
 		let disconnected_tx: mpsc::UnboundedSender<(String, u64)> = self.disconnected_tx.clone();
 		let room_list: Arc<RwLock<RawRwLock, BTreeMap<String, rooms::RoomInfo>>> = self.room_list.clone();
 		let seconds: u64 = self.reconnect_timeout_secs;
+		if add_auto_bot {
+			// 与 /ai 共用一次性邀请，确保 AI# 自动添加的机器人同样有可靠身份标记。
+			bot::command("/ai", &record, &room_id, connection_id);
+		}
 		self.connections.spawn(async move {
 			reconnect::run(connection, resume_receiver, available, engine_input, output, finished,
 				record, room_list, room_id.clone(), connection_id, seconds).await;
 			let _ = disconnected_tx.send((room_id, connection_id));
 		});
-		if add_auto_bot {
-			let tcp_port: u16 = srvpro3_config::get()?.server.tcp.port;
-			tokio::spawn(async move {
-				let selected = match tokio::task::spawn_blocking(srvpro3_windbot::random).await {
-					Ok(Ok(bot)) => bot,
-					Ok(Err(error)) => {
-						error!("获取随机 WindBot 失败：{error:#}");
-						return;
-					}
-					Err(error) => {
-						error!("获取随机 WindBot 任务失败：{error}");
-						return;
-					}
-				};
-				let bot = srvpro3_windbot::Bot {
-					name: selected.name,
-					deck: selected.ai_name,
-					host: "127.0.0.1".to_owned(),
-					port: tcp_port,
-					password: bot_password,
-					dialog: Some(selected.dialog),
-					version: None,
-					hand: None,
-					debug: false,
-					chat: true,
-				};
-				if let Err(error) = srvpro3_windbot::add(bot).await {
-					error!("添加随机 WindBot 失败：{error:#}");
-				}
-			});
-		}
 		Ok(())
 	}
 
