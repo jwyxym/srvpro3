@@ -1,5 +1,6 @@
 mod auth;
 mod history;
+mod host;
 mod query;
 mod room;
 mod ws;
@@ -47,6 +48,7 @@ pub async fn reload() -> Result<(), Error> {
 
 	let app: Router = Router::new()
 		.route("/ws", get(ws::connect))
+		.route("/host", get(host::get))
 		.route("/room", get(room::list))
 		.route("/room", delete(room::interrupt))
 		.route("/history", get(history::list))

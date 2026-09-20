@@ -8,8 +8,9 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
+use tokio::time::{Duration, MissedTickBehavior};
 
-use super::auth::{self, Credentials};
+use super::{auth::{self, Credentials}, host};
 
 use srvpro3_server::rooms::{self, RoomEvent};
 use srvpro3_config::Config;
@@ -53,6 +54,8 @@ async fn client(socket: WebSocket, credentials: Credentials) {
 	let (list, _) = rooms::get(0, u64::MAX).unwrap_or_default();
 	if !send(&mut output, "all", list).await { return; }
 	let mut events = rooms::subscribe();
+	let mut host_tick = tokio::time::interval(Duration::from_secs(1));
+	host_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 	loop {
 		tokio::select! {
 			message = input.next() => {
@@ -81,6 +84,10 @@ async fn client(socket: WebSocket, credentials: Credentials) {
 					if !send(&mut output, "all", list).await { break; }
 				}
 				Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+			},
+			_ = host_tick.tick() => {
+				let enabled = srvpro3_config::get().is_ok_and(|config| config.http_api.host);
+				if enabled && !send(&mut output, "host", host::usage()).await { break; }
 			}
 		}
 	}

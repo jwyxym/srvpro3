@@ -48,5 +48,8 @@ pub async fn authorize(request: Request, next: Next) -> Response {
 	};
 	response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
 	response.headers_mut().insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+	response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+	response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"));
+	response.headers_mut().insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Content-Type"));
 	response
 }

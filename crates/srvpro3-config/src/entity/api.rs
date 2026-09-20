@@ -9,6 +9,7 @@ use std::{fmt, collections::BTreeMap};
 pub struct HttpApi {
 	pub port: u16,
 	pub room: bool,
+	pub host: bool,
 	pub history: bool,
 	pub ws: bool,
 	pub user: BTreeMap<String, User>
@@ -19,6 +20,7 @@ impl Default for HttpApi {
 		Self {
 			port: 8080,
 			room: true,
+			host: true,
 			history: true,
 			ws: true,
 			user: BTreeMap::new()
