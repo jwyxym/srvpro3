@@ -56,6 +56,7 @@ srvpro3-http = { path = "./crates/srvpro3-http" }
 srvpro3-init = { path = "./crates/srvpro3-init" }
 srvpro3-log = { path = "./crates/srvpro3-log" }
 srvpro3-server = { path = "./crates/srvpro3-server" }
+srvpro3-windbot = { path = "./crates/srvpro3-windbot" }
 
 [workspace]
 resolver = "2"
@@ -67,5 +68,6 @@ members = [
 	"crates/srvpro3-http",
 	"crates/srvpro3-init",
 	"crates/srvpro3-log",
-	"crates/srvpro3-server"
+	"crates/srvpro3-server",
+	"crates/srvpro3-windbot"
 ]

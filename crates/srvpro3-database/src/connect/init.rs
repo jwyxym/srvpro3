@@ -21,13 +21,15 @@ async fn redis(address: String) -> Result<(), Error> {
 	}
 	if let Some(redis) = REDIS.get() {
 		let mut redis: RwLockWriteGuard<'_, RawRwLock, ConnectRedisBase> = redis.write();
-		if redis.address != address {
-			*redis = connect(address).await?;
+		if redis.address == address {
+			return Ok(());
 		}
+		*redis = connect(address).await?;
 	} else {
 		REDIS.set(RwLock::new(connect(address).await?))
 			.map_err(|e|anyhow!("{}", e))?;
 	}
+	info!("Redis连接成功");
 	Ok(())
 }
 
@@ -39,13 +41,15 @@ async fn db(address: String) -> Result<(), Error> {
 	}
 	if let Some(db) = DB.get() {
 		let mut db: RwLockWriteGuard<'_, RawRwLock, ConnectDataBase> = db.write();
-		if db.address != address {
-			*db = connect(address).await?;
+		if db.address == address {
+			return Ok(());
 		}
+		*db = connect(address).await?;
 	} else {
 		DB.set(RwLock::new(connect(address).await?))
 			.map_err(|e|anyhow!("{}", e))?;
 	}
+	info!("数据库连接成功");
 	Ok(())
 }
 
@@ -58,8 +62,6 @@ pub async fn init() -> Result<(), Error> {
 		Ok(address) => {
 			if let Err(e) = db(address).await {
 				error!("数据库连接失败 原因：{}", e);
-			} else {
-				info!("数据库连接成功");
 			}
 		}
 		Err(_) => {
@@ -70,8 +72,6 @@ pub async fn init() -> Result<(), Error> {
 		Ok(address) => {
 			if let Err(e) = redis(address).await {
 				error!("Redis连接失败 原因：{}", e);
-			} else {
-				info!("Redis连接成功");
 			}
 		}
 		Err(_) => {

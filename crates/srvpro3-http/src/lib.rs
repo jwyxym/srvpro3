@@ -1,4 +1,4 @@
 mod init;
 mod server;
 
-pub use init::init;
+pub use init::{init, reload};

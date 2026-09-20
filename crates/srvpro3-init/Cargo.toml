@@ -13,3 +13,4 @@ srvpro3-database.workspace = true
 srvpro3-log.workspace = true
 srvpro3-http.workspace = true
 srvpro3-server.workspace = true
+srvpro3-windbot.workspace = true

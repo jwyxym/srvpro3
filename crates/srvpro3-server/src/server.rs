@@ -17,9 +17,9 @@ use super::rooms;
 use std::{collections::BTreeMap, sync::{Arc, Mutex, atomic::AtomicBool}};
 use parking_lot::{RawRwLock, lock_api::RwLock};
 use anyhow::Error;
-use futures::{stream, future};
+use futures::stream;
 use tokio::{
-	sync::{mpsc, watch::Receiver},
+	sync::{mpsc, oneshot, watch::Receiver},
 	task::JoinSet,
 	spawn
 };
@@ -92,7 +92,7 @@ impl Server {
 		})
 	}
 
-	pub async fn run(mut self) -> Result<(), Error> {
+	pub async fn run(mut self, mut shutdown: oneshot::Receiver<()>) -> Result<(), Error> {
 		let (ready_tx, mut ready_rx) = mpsc::channel(64);
 		let mut listeners = self.listeners
 			.take()
@@ -100,10 +100,15 @@ impl Server {
 			.start(ready_tx);
 		if listeners.is_empty() {
 			error!("所有对局协议均已禁用");
-			future::pending::<()>().await;
+			let _ = shutdown.await;
+			return Ok(());
 		}
 		loop {
 			tokio::select! {
+				_ = &mut shutdown => {
+					self.leave_udp_clients().await;
+					return Ok(());
+				}
 				result = listeners.join_next() => {
 					if let Some(result) = result { result??; }
 					return Err(anyhow::anyhow!("传输监听任务意外退出"));
@@ -141,6 +146,23 @@ impl Server {
 				}
 			}
 		}
+	}
+
+	/// 向当前所有仍连接的 UDP 客户端发送离开房间消息。
+	///
+	/// 发送后由调用方继续关闭对应的传输服务。
+	pub async fn leave_udp_clients(&self) {
+		for room in self.rooms.values() {
+			let record = room.record.lock().unwrap();
+			for player in record.players.values() {
+				if player.connected && player.protocol == transport::Protocol::Udp {
+					let _ = player.outgoing.try_send(reconnect::bytes(
+						stoc::LeaveGame { pos: player.position }.into()
+					));
+				}
+			}
+		}
+		tokio::task::yield_now().await;
 	}
 
 	fn interrupt_room(&mut self, room_id: &str) -> bool {

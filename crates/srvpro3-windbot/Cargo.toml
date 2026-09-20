@@ -1,0 +1,13 @@
+[package]
+name = "srvpro3-windbot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libloading.workspace = true
+log.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+
+srvpro3-config.workspace = true
+srvpro3-log.workspace = true

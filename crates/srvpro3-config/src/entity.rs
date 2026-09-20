@@ -3,6 +3,7 @@ mod redis;
 mod api;
 mod server;
 mod cards;
+mod windbot;
 
 pub use server::Server;
 
@@ -10,6 +11,7 @@ pub use db::{Database, DB};
 pub use redis::Redis;
 pub use api::{HttpApi, User, Permissions};
 pub use cards::{Cards, LFlist};
+pub use windbot::WindBot;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,5 +23,6 @@ pub struct Config {
 	#[serde(alias = "api")]
 	pub http_api: HttpApi,
 	pub redis: Redis,
-	pub cards: Cards
+	pub cards: Cards,
+	pub windbot: WindBot
 }

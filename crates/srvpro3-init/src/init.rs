@@ -9,5 +9,7 @@ pub async fn init() -> Result<(), Error> {
 	srvpro3_database::init().await?;
 	srvpro3_http::init().await?;
 	srvpro3_server::init().await?;
+	srvpro3_windbot::init()?;
+	super::command::command().await?;
 	Ok(())
 }
