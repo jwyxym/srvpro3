@@ -36,27 +36,31 @@ impl RoomRecord {
 
 	// 调用时先锁记录，再锁列表；只更新仍存在的房间，避免结束后重新插入。
 	pub fn update_info(&self, rooms: &RoomList, room_id: &str) {
-		let mut rooms = rooms.write();
-		let Some(info) = rooms.get_mut(room_id) else { return };
-		info.player_a.clear();
-		info.player_b.clear();
-		info.spectators = 0;
-		info.connections = 0;
-		for (&id, player) in &self.players {
-			if !player.connected { continue; }
-			info.connections += 1;
-			match player.position {
-				Netplayer::Player(slot) => {
-					let team = if slot < self.team_size { &mut info.player_a } else { &mut info.player_b };
-					team.push(RoomPlayer { id, name: player.name.clone(), slot });
+		let updated = {
+			let mut rooms = rooms.write();
+			let Some(info) = rooms.get_mut(room_id) else { return };
+			info.player_a.clear();
+			info.player_b.clear();
+			info.spectators = 0;
+			info.connections = 0;
+			for (&id, player) in &self.players {
+				if !player.connected { continue; }
+				info.connections += 1;
+				match player.position {
+					Netplayer::Player(slot) => {
+						let team = if slot < self.team_size { &mut info.player_a } else { &mut info.player_b };
+						team.push(RoomPlayer { id, name: player.name.clone(), slot });
+					}
+					Netplayer::Observer(_) => info.spectators += 1,
+					_ => {}
 				}
-				Netplayer::Observer(_) => info.spectators += 1,
-				_ => {}
 			}
-		}
-		info.player_a.sort_by_key(|player| player.slot);
-		info.player_b.sort_by_key(|player| player.slot);
-		info.chats = self.chats.iter().cloned().collect();
+			info.player_a.sort_by_key(|player| player.slot);
+			info.player_b.sort_by_key(|player| player.slot);
+			info.chats = self.chats.iter().cloned().collect();
+			info.clone()
+		};
+		crate::rooms::updated(updated);
 	}
 
 	pub fn observe_input(&mut self, id: u64, message: &ctos::Message) {

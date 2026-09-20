@@ -40,6 +40,7 @@ static EVENTS: LazyLock<broadcast::Sender<RoomEvent>> =
 #[derive(Clone, Debug)]
 pub enum RoomEvent {
 	Add(RoomInfo),
+	Update(RoomInfo),
 	Close(RoomInfo),
 }
 
@@ -71,6 +72,10 @@ pub fn subscribe() -> broadcast::Receiver<RoomEvent> {
 
 pub fn added(room: RoomInfo) {
 	let _ = EVENTS.send(RoomEvent::Add(room));
+}
+
+pub fn updated(room: RoomInfo) {
+	let _ = EVENTS.send(RoomEvent::Update(room));
 }
 
 pub fn closed(room: RoomInfo) {

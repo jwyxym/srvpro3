@@ -74,6 +74,7 @@ async fn client(socket: WebSocket, credentials: Credentials) {
 			}
 			event = events.recv() => match event {
 				Ok(RoomEvent::Add(room)) => if !send(&mut output, "add", room).await { break; },
+				Ok(RoomEvent::Update(room)) => if !send(&mut output, "update", room).await { break; },
 				Ok(RoomEvent::Close(room)) => if !send(&mut output, "close", room).await { break; },
 				Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
 					let (list, _) = rooms::get(0, u64::MAX).unwrap_or_default();
