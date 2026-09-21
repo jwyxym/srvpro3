@@ -8,7 +8,7 @@ export const get_host = async () : Promise<Object | void | Error> => {
 		if (check.has('get_host'))
 			return;
 		check.add('get_host');
-		const i = await fetch('/host' + admin.to_query());
+		const i = await fetch('/host' + await admin.to_query('/host'));
 		if (!i.ok) {
 			const text = await i.text();
 			throw new Error(text || `请求失败：${i.status}`)

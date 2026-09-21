@@ -56,7 +56,7 @@
 	const controller = new AbortController();
 	const request = async <T,>(path : string) : Promise<T> => {
 		if (cache.has(path)) return cache.get(path) as T;
-		const response = await fetch(path + admin.to_query(), { signal : controller.signal });
+		const response = await fetch(path + await admin.to_query(path, 'GET', undefined, controller.signal), { signal : controller.signal });
 		if (!response.ok) throw new Error(await response.text() || `请求失败：${response.status}`);
 		const value = await response.json() as T;
 		// 请求期间可能已经收到较新的 WS 快照，不能用旧响应覆盖它。

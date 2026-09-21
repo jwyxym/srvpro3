@@ -48,8 +48,8 @@
 	import admin from '@/script/admin';
 	interface Player { id : number; name : string; slot : number }
 	const interrupt_request = async (room_id : string) => {
-		const query = new URLSearchParams({ user : admin.name, password : admin.pass, room_id });
-		const response = await fetch(`/room?${query}`, { method : 'DELETE' });
+		const query = await admin.to_query('/room', 'DELETE', new URLSearchParams({ room_id }));
+		const response = await fetch(`/room${query}`, { method : 'DELETE' });
 		if (!response.ok) throw new Error(await response.text() || `请求失败：${response.status}`);
 		const result = await response.json();
 		if (!result.interrupted) throw new Error('房间未能中止');

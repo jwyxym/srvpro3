@@ -14,6 +14,10 @@ parking_lot.workspace = true
 futures.workspace = true
 serde_json.workspace = true
 sysinfo.workspace = true
+base64.workspace = true
+rsa = "0.9"
+sha2 = "0.10"
+aes-gcm = "0.10"
 
 srvpro3-log.workspace = true
 srvpro3-config.workspace = true

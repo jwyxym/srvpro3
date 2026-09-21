@@ -33,11 +33,14 @@ export const close = () => {
 export const connect = () : void => {
 	const url = new URL('/ws', window.location.href);
 	url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-	url.search = new URLSearchParams({ user : admin.name, password : admin.pass }).toString();
-	if (ws && connection_url === url.href) return;
+	const identity = JSON.stringify([admin.name, admin.pass]);
+	if (ws && connection_url === identity) return;
 	close();
-	connection_url = url.href;
-	const socket = new ReconnectingWebSocket(url.href);
+	connection_url = identity;
+	const socket = new ReconnectingWebSocket(async () => {
+		url.search = await admin.to_query('/ws');
+		return url.href;
+	});
 	ws = socket;
 	socket.onopen = () => {
 		state.connected = true;

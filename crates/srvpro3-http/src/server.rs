@@ -51,6 +51,7 @@ pub async fn reload() -> Result<(), Error> {
 		return Ok(());
 	}
 
+	auth::crypto::init().await?;
 	let app: Router = Router::new()
 		.route("/ws", get(ws::connect))
 		.route("/host", get(host::get))
@@ -63,6 +64,7 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/history", put(history::update))
 		.route("/history", delete(history::delete))
 		.route_layer(middleware::from_fn(auth::authorize))
+		.route("/auth/public-key", get(auth::crypto::public_key))
 		.merge(webui::router());
 	if !room || !ws {
 		warn!("未启用WebSocket<房间列表>接口，如需启用，请修改config.toml的内容");

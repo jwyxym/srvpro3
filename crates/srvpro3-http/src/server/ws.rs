@@ -1,7 +1,7 @@
 use axum::{
 	http::StatusCode,
 	extract::{
-		ws::{Message, WebSocket, WebSocketUpgrade}, Query
+		ws::{Message, WebSocket, WebSocketUpgrade}, Extension
 	},
 	response::Response
 };
@@ -39,7 +39,7 @@ fn check() -> Result<(), (StatusCode, &'static str)> {
 
 pub async fn connect(
 	ws: WebSocketUpgrade,
-	Query(credentials): Query<Credentials>,
+	Extension(credentials): Extension<Credentials>,
 ) -> Result<Response, (StatusCode, &'static str)> {
 	check()?;
 	Ok(ws.on_upgrade(move |socket| client(socket, credentials)))

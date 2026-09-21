@@ -69,9 +69,9 @@
 				}).then(() => true, () => false);
 				if (!confirmed) return;
 				loading = ElLoading.service({ lock : true, text : id === undefined ? '正在清空历史记录' : '正在删除历史记录' });
-				const query = new URLSearchParams({ user : admin.name, password : admin.pass });
+				const query = new URLSearchParams();
 				query.set(id === undefined ? 'all' : 'id', id === undefined ? 'true' : String(id));
-				const response = await fetch(`/history?${query}`, { method : 'DELETE' });
+				const response = await fetch('/history' + await admin.to_query('/history', 'DELETE', query), { method : 'DELETE' });
 				if (!response.ok) throw new Error(await response.text() || `请求失败：${response.status}`);
 				const result = await response.json() as { rows_affected : number };
 				ElMessage.success(`已删除 ${result.rows_affected} 条历史记录`);
@@ -104,8 +104,8 @@
 				while (pending && !controller.signal.aborted) {
 					pending = false;
 					const request_revision = revision;
-					const query = new URLSearchParams({ user : admin.name, password : admin.pass, page : String(page.current_page - 1), page_size : String(page.page_size) });
-					const response = await fetch('/history?' + query, { signal : controller.signal });
+					const query = new URLSearchParams({ page : String(page.current_page - 1), page_size : String(page.page_size) });
+					const response = await fetch('/history' + await admin.to_query('/history', 'GET', query, controller.signal), { signal : controller.signal });
 					if (!response.ok) throw new Error(await response.text() || `请求失败：${response.status}`);
 					const result = await response.json() as { list : RecordInfo[]; total : number };
 					if (request_revision !== revision) continue;
