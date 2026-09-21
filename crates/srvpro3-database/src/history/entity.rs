@@ -13,7 +13,7 @@ pub struct Model {
 	pub winner_id: Option<String>, // 胜利者名称；无胜者时为空
 	pub room_id: String,        // 房间
 	#[sea_orm(column_type = "Text")]
-	pub replay: Option<String>, // 当前小局观战帧：gzip 压缩后转 Base64
+	pub replay: Option<String>, // yrp3d:v1: + gzip/Base64；无前缀为旧版观战帧
 	pub created_at: i64,        // 时间戳
 }
 

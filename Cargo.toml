@@ -43,7 +43,7 @@ sysinfo = "0.37.2"
 indexmap = { version = "2.13.0", features = ["serde"] }
 libloading = "0.9.0"
 ygopro-derive = "0.1.1"
-ygopro = { version = "0.1.5", default-features = false, features = ["koishi"] }
+ygopro = { version = "0.1.5", default-features = false, features = ["koishi", "forge"] }
 ygopro-data = { version = "0.1.1", default-features = false }
 ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
 ygopro-handler = "0.1.2"

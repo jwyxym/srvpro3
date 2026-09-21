@@ -398,7 +398,7 @@ impl Server {
 				mode: ReplayMode::empty(),
 				save_path: "replays".into(),
 				file_template: "%Y-%m-%d %H-%M-%S {players}".into(),
-				format: ygopro::plugin::replay::Format::Raw,
+				format: ygopro::plugin::replay::Format::YgoproForge,
 			});
 			let mut host = DuelHost::new(options.host_info, configuration);
 			let finish_signal =
