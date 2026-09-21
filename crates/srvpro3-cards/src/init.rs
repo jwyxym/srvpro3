@@ -77,7 +77,12 @@ pub async fn init() -> Result<(), Error> {
 				if let Some(name) = i.file_name().to_str() {
 					if name.ends_with(".cdb") {
 						if let Ok(cards) = cdb::read(i.path()).await {
-							for card in cards { snapshot.cards.insert(card.code, card); }
+							for card in cards {
+								if snapshot.cards.contains_key(&card.code) {
+									continue;
+								}
+								snapshot.cards.insert(card.code, card);
+							}
 						}
 					} else if name.ends_with("lflist.conf") {
 						let _ = lflist::read_path(&mut snapshot.lflists, i.path());
