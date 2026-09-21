@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 use ygopro::{
 	duel::{Duel, PlayerIndex},
-	message::{DuelStart, DuelEnd},
+	message::{DuelStart, DuelEnd, GenerateReplay},
 	single_duel::{SingleDuel, ygopro_handlers::{HandlerEx, SINGLE_DUEL_YGOPRO_HANDLERS_EX}},
-	ygopro_handlers::{Handler, Request, YGOPRO_HANDLERS},
+	ygopro_handlers::{Handler, HandlerEx as GeneralHandlerEx, Request, YGOPRO_HANDLERS, YGOPRO_HANDLERS_EX},
 };
 use ygopro_data::{constants::{CorePlayer, Netplayer}, message::ctos};
 use ygopro_derive::{after, before, register_to};
@@ -32,14 +32,37 @@ fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 #[register_to(SINGLE_DUEL_YGOPRO_HANDLERS_EX as HandlerEx)]
 fn on_duel_end(message: &DuelEnd, config: RecordConfig) {
 	let mut record = config.0.lock().unwrap();
-	if let Some(mut history) = record.current_history.take() {
+	if let Some(history) = record.current_history.as_mut() {
 		history.winner_id = match message.winner {
 			CorePlayer::FirstAttackPlayer => Some(history.first_attack_slot),
 			CorePlayer::SecondAttackPlayer => Some(history.first_attack_slot ^ 1),
 			_ => None,
 		};
-		record.history.push(history);
 	}
+}
+
+#[after(GenerateReplay)]
+#[register_to(YGOPRO_HANDLERS_EX as GeneralHandlerEx)]
+fn on_generate_replay(duel: &mut Duel, config: RecordConfig) {
+	let history = {
+		let mut record = config.0.lock().unwrap();
+		let Some(history) = record.current_history.take() else { return; };
+		// 留下每局结果供赛事比分统计；数据库写入只在此处触发一次。
+		record.history.push(history.clone());
+		history
+	};
+	let Ok(settings) = srvpro3_config::get() else { return; };
+	if matches!(settings.db.db, srvpro3_config::DB::None) { return; }
+	let replay = settings.server.replay;
+	drop(settings);
+	let buffer = if replay { super::history::replay_buffer(duel).map(Some) } else { Ok(None) };
+	tokio::spawn(async move {
+		let result = async {
+			let buffer = buffer?;
+			super::history::persist(history, buffer).await
+		}.await;
+		if let Err(error) = result { srvpro3_log::error!("保存小局历史记录失败：{error:#}"); }
+	});
 }
 
 #[derive(Clone)]

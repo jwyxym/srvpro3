@@ -6,10 +6,21 @@ use ygopro::{
 	player::BaseDuelPlayer,
 	ygopro_handlers::{Handler, HandlerEx, Response, YGOPRO_HANDLERS, YGOPRO_HANDLERS_EX},
 };
-use ygopro_data::{constants::{DuelStage, Netplayer}, message::{ctos, gm::{self, GameMessage}, stoc}};
+use ygopro_data::{complex::Complex, constants::{DuelStage, Netplayer}, message::{ctos, gm::{self, GameMessage}, stoc}};
 use ygopro_derive::{after, command, register_to};
 
 pub const NAME: &str = module_path!();
+
+/// 当前小局的公开游戏消息，同时供中途观战和录像保存使用。
+pub fn messages(duel: &Duel) -> impl Iterator<Item = &Complex<stoc::Message>> {
+	let recorded = &duel.sender.masked_messages;
+	let start = recorded.iter().rposition(|message| {
+		matches!(message.deref(), stoc::Message::GameMessage(game) if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 != 0))
+	}).unwrap_or(recorded.len());
+	recorded.iter().skip(start).filter(|&message| {
+		matches!(message.deref(), stoc::Message::GameMessage(game) if game.message.waiting_for().is_none())
+	})
+}
 
 #[command]
 #[register_to(COMMANDS as CommandHandler with &'static str)]
@@ -19,14 +30,7 @@ fn srvpro_spectate(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>) {
 	// 先通知客户端离开等待房间；GAME_MSG START 本身不会切换对局界面。
 	if sender.send(stoc::Message::from(stoc::DuelStart).into()).is_err() { return; }
 	// 从最新一局的 START 开始，使用已遮蔽手牌等私有信息的观战消息。
-	let start = duel.sender.masked_messages.iter().rposition(|message| {
-		matches!(message.deref(), stoc::Message::GameMessage(game) if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 != 0))
-	});
-	let Some(start) = start else { return; };
-	for message in duel.sender.masked_messages.iter().skip(start) {
-		let stoc::Message::GameMessage(game) = message.deref() else { continue; };
-		// 观战者不接收要求选卡、操作或响应的消息。
-		if game.message.waiting_for().is_some() { continue; }
+	for message in messages(duel) {
 		// 直接发往该观战者，不广播，也不将补发消息重复记入历史。
 		if sender.send(message.clone()).is_err() { break; }
 	}

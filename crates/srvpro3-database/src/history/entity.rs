@@ -12,7 +12,8 @@ pub struct Model {
 	pub deck_b: String,         // 玩家B卡组
 	pub winner_id: Option<String>, // 胜利者名称；无胜者时为空
 	pub room_id: String,        // 房间
-	pub replay: Option<String>, // 对局回放
+	#[sea_orm(column_type = "Text")]
+	pub replay: Option<String>, // 当前小局观战帧：gzip 压缩后转 Base64
 	pub created_at: i64,        // 时间戳
 }
 

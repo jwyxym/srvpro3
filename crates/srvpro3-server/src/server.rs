@@ -9,6 +9,7 @@ mod transport;
 mod reconnect;
 mod resilience;
 mod spectate;
+mod cloud_replay;
 mod bot;
 mod tournament;
 
@@ -150,12 +151,6 @@ impl Server {
 						if let Some(info) = self.room_list.write().remove(&room_id) {
 							rooms::closed(info);
 						}
-						let records = room.record.lock().unwrap().history.clone();
-						spawn(async move {
-							if let Err(error) = history::persist(records).await {
-								error!("房间 {room_id} 对局记录写入失败: {error:#}");
-							}
-						});
 						self.completed_rooms.push(room.record);
 					}
 				}
@@ -172,6 +167,10 @@ impl Server {
 					let _ = request.result.send(self.interrupt_room(&request.room_id));
 				}
 				Some(connection) = ready_rx.recv() => {
+					if connection.handshake.pass.starts_with("R#") {
+						self.connections.spawn(cloud_replay::run(connection));
+						continue;
+					}
 					let Some(connection) = self.resume_connection(connection) else { continue };
 					let existing = password::Password::parse(&connection.handshake.pass).ok()
 						.and_then(|options| options.room_key)
@@ -365,7 +364,7 @@ impl Server {
 			}
 		}
 		let add_auto_bot: bool = options.auto_bot && !self.rooms.contains_key(&room_id);
-		let repaly = srvpro3_config::get()?.server.repaly;
+		let watch = srvpro3_config::get()?.server.watch;
 
 		let room_id_for_finish: String = room_id.clone();
 		let record_room_id: String = if admission.is_some() { room_id.clone() } else { connection.handshake.pass.clone() };
@@ -376,7 +375,7 @@ impl Server {
 			record.lock().unwrap().tournament = admission.as_ref().map(tournament::Admission::create_room);
 			let mut configuration: ygopro::Configuration = ygopro::Configuration::default();
 			options.configure(&mut configuration);
-			if repaly { configuration.enable_plugin(spectate::NAME); }
+			if watch { configuration.enable_plugin(spectate::NAME); }
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));
