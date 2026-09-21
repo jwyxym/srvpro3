@@ -172,6 +172,16 @@ impl Server {
 						continue;
 					}
 					let Some(connection) = self.resume_connection(connection) else { continue };
+					// 已开局赛事的显式房间号允许任意昵称观战，不再查询参赛身份。
+					let watching = srvpro3_config::get()?.server.watch
+						&& self.rooms.get(&connection.handshake.pass).is_some_and(|room| {
+							let record = room.record.lock().unwrap();
+							record.tournament.is_some() && tournament::watchable(record.stage)
+						});
+					if watching {
+						self.accept_connection(connection, None)?;
+						continue;
+					}
 					let existing = password::Password::parse(&connection.handshake.pass).ok()
 						.and_then(|options| options.room_key)
 						.and_then(|key| self.rooms.get(&key))
@@ -345,11 +355,14 @@ impl Server {
 		let room_id: String = admission.as_ref().map(tournament::Admission::room_id).or_else(|| bot_room.map(|(room_id, _)| room_id)).or_else(|| options.room_key.clone()).unwrap_or_else(|| {
 			self.random_room(&options.random_prefix(), options.capacity())
 		});
+		let mut watching_tournament = false;
 		if let Some(room) = self.rooms.get(&room_id) {
 			let record = room.record.lock().unwrap();
+			watching_tournament = admission.is_none() && record.tournament.is_some()
+				&& tournament::watchable(record.stage) && srvpro3_config::get()?.server.watch;
 			let check = if let Some(value) = &admission {
 				value.check_room(&record, |id| self.resumes.contains_key(&id))
-			} else if record.tournament.is_some() {
+			} else if record.tournament.is_some() && !watching_tournament {
 				Err(anyhow::anyhow!("比赛房间只能通过赛事匹配加入"))
 			} else { Ok(()) };
 			if let Err(error) = check {
@@ -357,8 +370,8 @@ impl Server {
 				return Ok(());
 			}
 		}
-		if let Some(value) = &admission {
-			if let Err(error) = value.prepare(&mut connection, connection_id) {
+		if admission.is_some() || watching_tournament {
+			if let Err(error) = tournament::Admission::prepare(&mut connection, connection_id) {
 				Self::reject_with_reason(connection, &error.to_string());
 				return Ok(());
 			}

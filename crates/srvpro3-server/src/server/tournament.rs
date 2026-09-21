@@ -9,6 +9,10 @@ use ygopro_data::{constants::DuelStage, data::Deck, message::ctos};
 use super::{password::Password, room::RoomRecord, transport::Connection};
 use api::{Api, Match, Participant, Score};
 
+pub fn watchable(stage: DuelStage) -> bool {
+	matches!(stage, DuelStage::Finger | DuelStage::Firstgo | DuelStage::Dueling | DuelStage::Siding)
+}
+
 pub struct Admission {
 	pub requested_at: tokio::time::Instant,
 	pub api: Arc<Api>,
@@ -60,7 +64,7 @@ impl Admission {
 		Ok(())
 	}
 
-	pub fn prepare(&self, connection: &mut Connection, id: u64) -> Result<()> {
+	pub fn prepare(connection: &mut Connection, id: u64) -> Result<()> {
 		// 只转交已校验的两条握手，防止首包中的 CreateGame 等消息覆盖赛事规则。
 		let name = connection.initial.iter().rev().find_map(|message| match message {
 			ctos::Message::PlayerInfo(value) => Some(value.clone()), _ => None,

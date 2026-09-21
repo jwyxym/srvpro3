@@ -9,8 +9,38 @@ use srvpro3_config::Config;
 
 #[derive(Serialize)]
 pub struct ListResponse {
-	list: Vec<Model>,
+	list: Vec<RecordResponse>,
 	total: u64,
+}
+
+/// 对外只提供录像是否存在，不发送录像正文；数据库仍保存完整内容。
+#[derive(Serialize)]
+pub struct RecordResponse {
+	id: i64,
+	player_a: String,
+	player_b: String,
+	deck_a: String,
+	deck_b: String,
+	winner_id: Option<String>,
+	room_id: String,
+	replay: bool,
+	created_at: i64,
+}
+
+impl From<Model> for RecordResponse {
+	fn from(record: Model) -> Self {
+		Self {
+			id: record.id,
+			player_a: record.player_a,
+			player_b: record.player_b,
+			deck_a: record.deck_a,
+			deck_b: record.deck_b,
+			winner_id: record.winner_id,
+			room_id: record.room_id,
+			replay: record.replay.is_some_and(|value| !value.is_empty()),
+			created_at: record.created_at,
+		}
+	}
 }
 
 #[derive(Deserialize)]
@@ -62,29 +92,29 @@ pub async fn list(
 		.map_err(|_| {
 			(StatusCode::INTERNAL_SERVER_ERROR, "查询历史记录失败")
 		})?;
-	Ok(Json(ListResponse { list, total }))
+	Ok(Json(ListResponse { list: list.into_iter().map(RecordResponse::from).collect(), total }))
 }
 
 pub async fn create(
 	Json(request): Json<CreateRequest>,
-) -> Result<Json<Model>, (StatusCode, &'static str)> {
+) -> Result<Json<RecordResponse>, (StatusCode, &'static str)> {
 	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
 	let record: Model = srvpro3_database::history::create(
 		&db, request.player_a, request.player_b, request.deck_a, request.deck_b,
 		request.winner_id, request.room_id, request.replay,
 	).await.map_err(|_| (StatusCode::BAD_REQUEST, "新增历史记录失败"))?;
-	Ok(Json(record))
+	Ok(Json(record.into()))
 }
 
 pub async fn update(
 	Json(request): Json<UpdateRequest>,
-) -> Result<Json<Model>, (StatusCode, &'static str)> {
+) -> Result<Json<RecordResponse>, (StatusCode, &'static str)> {
 	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
 	let record: Model = srvpro3_database::history::update(&db, request.id, request.winner_id, request.replay)
 		.await.map_err(|_| (StatusCode::NOT_FOUND, "历史记录不存在或修改失败"))?;
-	Ok(Json(record))
+	Ok(Json(record.into()))
 }
 
 pub async fn delete(

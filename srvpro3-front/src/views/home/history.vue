@@ -13,11 +13,15 @@
 					<div class = 'detail'>
 						<p>卡组 A（Base64）</p><el-input :model-value = 'row.deck_a' type = 'textarea' readonly autosize/>
 						<p>卡组 B（Base64）</p><el-input :model-value = 'row.deck_b' type = 'textarea' readonly autosize/>
-						<p>录像</p><el-input v-if = 'row.replay' :model-value = 'row.replay' type = 'textarea' readonly autosize/><span v-else>暂无录像</span>
 					</div>
 				</template></el-table-column>
 				<el-table-column prop = 'id' label = 'ID' width = '90'/>
 				<el-table-column prop = 'room_id' label = '房间号' min-width = '130'/>
+				<el-table-column label = '录像' min-width = '110'>
+					<template #default = '{ row }'>
+						<el-text v-if = 'row.replay' type = 'primary' class = 'replay_pass' role = 'button' tabindex = '0' :aria-label = '`复制录像口令 R#${row.id}`' @click = 'page.copy_replay_pass(row.id)' @keydown.enter.prevent = 'page.copy_replay_pass(row.id)' @keydown.space.prevent = 'page.copy_replay_pass(row.id)'>R#{{ row.id }}</el-text>
+					</template>
+				</el-table-column>
 				<el-table-column prop = 'player_a' label = '玩家 A' min-width = '160'>
 					<template #default = '{ row }'>
 						<el-text type = 'primary' class = 'player_name' role = 'button' tabindex = '0' @click = 'page.open_deck(row.deck_a, row.player_a)' @keydown.enter.prevent = 'page.open_deck(row.deck_a, row.player_a)' @keydown.space.prevent = 'page.open_deck(row.deck_a, row.player_a)'>{{ row.player_a }}</el-text>
@@ -45,7 +49,7 @@
 	import emitter, { type Events } from '@/script/emit';
 	interface RecordInfo {
 		id : number; room_id : string; player_a : string; player_b : string;
-		deck_a : string; deck_b : string; winner_id : string | null; replay : string | null; created_at : number;
+		deck_a : string; deck_b : string; winner_id : string | null; replay : boolean; created_at : number;
 	}
 	const controller = new AbortController();
 	let pending = false;
@@ -59,6 +63,12 @@
 		loading : false,
 		error : '',
 		deleting : null as number | 'all' | null,
+		copy_replay_pass : async (id : number) => {
+			try {
+				await navigator.clipboard.writeText(`R#${id}`);
+				ElMessage.success('录像口令已复制');
+			} catch {}
+		},
 		delete_history : async (id? : number) => {
 			if (page.deleting !== null) return;
 			page.deleting = id ?? 'all';
@@ -154,6 +164,6 @@
 			p { color: var(--el-text-color-secondary); }
 		}
 		.pagination { overflow-x: auto; }
-		.player_name { cursor: pointer; }
+		.player_name, .replay_pass { cursor: pointer; }
 	}
 </style>

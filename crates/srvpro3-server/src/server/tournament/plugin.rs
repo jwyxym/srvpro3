@@ -27,6 +27,40 @@ fn join(duel: &mut Duel, request: &mut Request, config: RecordConfig, stop: &mut
 	let Netplayer::Undecided(undecided) = request.extra else { return Err(refused()) };
 	let mut record = config.0.lock().unwrap();
 	let room = record.tournament.as_ref().ok_or_else(refused)?;
+	if super::watchable(duel.stage) && !room.seats.contains(&Some(id)) {
+		if !srvpro3_config::get().is_ok_and(|config| config.server.watch)
+			|| !record.players.get(&id).is_some_and(|player| player.connected && player.position == Netplayer::Unknown) {
+			return Err(refused());
+		}
+		let observer = duel.observers.vacant_entry().key();
+		let observer = u8::try_from(observer).map_err(|_| refused())?;
+		let player = duel.uninit_players.try_remove(undecided as usize).ok_or_else(refused)?;
+		duel.sender.undecided.remove(undecided as usize);
+		let sender = player.stoc_sender.clone();
+		duel.observers.insert(player);
+		duel.sender.observers.insert(sender);
+		let position = Netplayer::Observer(observer);
+		request.extra = position;
+		if let Some(player) = record.players.get_mut(&id) {
+			player.position = position;
+			player.is_host = false;
+		}
+		drop(record);
+		let mut info = duel.host_info.clone();
+		if let Some(list) = deck_manager::load().get_lflist_by_index(info.lflist) { info.lflist = list.hash; }
+		let mut response = vec![stoc::JoinGame { info }.into(), stoc::TypeChange { player: position, host: false }.into()];
+		for (slot, player) in duel.players.iter().enumerate() {
+			if let Some(player) = player {
+				response.push(stoc::HsPlayerEnter { name: player.name.clone(), pos: Netplayer::Player(slot as u8) }.into());
+			}
+		}
+		// 本插件设置了 StopFlag，普通 JoinGame 的 after 钩子不会执行。
+		// 命令排在进房响应之后，切换对局界面并补发观战进度。
+		let _ = duel.request_sender.send(ygopro::duel::Request::Command {
+			name: "srvpro_spectate", arguments: Some(Box::new(position)),
+		});
+		return Ok(response);
+	}
 	let slot = room.seats.iter().position(|value| *value == Some(id)).ok_or_else(refused)?;
 	if duel.stage != DuelStage::Begin || duel.players[slot].is_some() { return Err(refused()); }
 	let player = duel.uninit_players.try_remove(undecided as usize).ok_or_else(refused)?;

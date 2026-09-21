@@ -103,8 +103,8 @@ async fn client(socket: WebSocket, credentials: Credentials) {
 				let enabled = srvpro3_config::get().is_ok_and(|config| config.http_api.history);
 				if !enabled { continue; }
 				let sent = match event {
-					Ok(HistoryEvent::Add(record)) => send(&mut output, "history_add", record).await,
-					Ok(HistoryEvent::Update(record)) => send(&mut output, "history_update", record).await,
+					Ok(HistoryEvent::Add(record)) => send(&mut output, "history_add", super::history::RecordResponse::from(record)).await,
+					Ok(HistoryEvent::Update(record)) => send(&mut output, "history_update", super::history::RecordResponse::from(record)).await,
 					Ok(HistoryEvent::Delete(deleted)) => send(&mut output, "history_delete", deleted).await,
 					Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => send(&mut output, "history_reset", serde_json::json!({})).await,
 					Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
