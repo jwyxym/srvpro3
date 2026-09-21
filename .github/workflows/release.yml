@@ -58,14 +58,19 @@ jobs:
           cache-dependency-path: srvpro3-front/package-lock.json
 
       - name: Install Rust
+        id: rust-toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: actions/cache@v4
         with:
-          workspaces: './ -> target'
+          path: |
+            target
+          key: rust-${{ matrix.os }}-${{ runner.arch }}-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            rust-${{ matrix.os }}-${{ runner.arch }}-${{ steps.rust-toolchain.outputs.cachekey }}-
 
       - name: Install frontend dependencies
         working-directory: srvpro3-front
