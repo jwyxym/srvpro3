@@ -1,7 +1,5 @@
-use serde::{
-	Deserialize, Deserializer, Serialize, de::{self, Visitor}
-};
-use std::{collections::BTreeMap, fmt};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(default)]
@@ -10,7 +8,6 @@ pub struct Cards {
 	pub ypk: bool,
 	/// 自动重载间隔，单位秒；小于等于 0 表示禁用。
 	pub reload: i32,
-	pub lflist: LFlist,
 	#[serde(with = "excode")]
 	pub excode: BTreeMap<u32, Vec<u16>>
 }
@@ -21,7 +18,6 @@ impl Default for Cards {
 			expansions: Vec::new(),
 			ypk: true,
 			reload: 1800,
-			lflist: LFlist::None,
 			excode: BTreeMap::from([
 				(8512558, vec![0x8f, 0x54, 0x59, 0x82, 0x13a]),
 				(55088578, vec![0x8f, 0x54, 0x59, 0x82, 0x13a])
@@ -72,46 +68,6 @@ mod excode {
 			map.serialize_entry(&code.to_string(), setcodes)?;
 		}
 		map.end()
-	}
-}
-
-#[derive(Serialize, Clone, Debug, Default)]
-pub enum LFlist {
-	Name(String),
-	Index(i64),
-	#[default]
-	None
-}
-
-impl<'de> Deserialize<'de> for LFlist {
-	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-		struct LFlistVisitor;
-
-		impl<'de> Visitor<'de> for LFlistVisitor {
-			type Value = LFlist;
-
-			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-				formatter.write_str("")
-			}
-
-			fn visit_i64<E: de::Error>(self, value: i64) -> Result<Self::Value, E>  {
-				Ok(if value < 0 {
-					LFlist::None
-				} else {
-					LFlist::Index(value)
-				})
-			}
-
-			fn visit_str<E: de::Error>(self, value: &str) -> Result<Self::Value, E>  {
-				Ok(if value.trim().is_empty() {
-					LFlist::None
-				} else {
-					LFlist::Name(value.to_string())
-				})
-			}
-		}
-
-		deserializer.deserialize_any(LFlistVisitor)
 	}
 }
 

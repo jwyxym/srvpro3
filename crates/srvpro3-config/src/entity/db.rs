@@ -11,7 +11,8 @@ pub struct Database {
 	pub address: String,
 	pub user: String,
 	pub port: String,
-	pub password: String
+	pub password: String,
+	pub name: String
 }
 
 impl Default for Database {
@@ -22,6 +23,7 @@ impl Default for Database {
 			user: String::new(),
 			port: String::new(),
 			password: String::new(),
+			name: String::new()
 		}
 	}
 }
@@ -64,18 +66,18 @@ impl Database {
 	pub fn address(&self) -> Result<String, ()> {
 		match self.db {
 			DB::MySQL => Ok(format!(
-				"mysql://{}:{}@{}:{}",
-				self.user, self.password, self.address, self.port
+				"mysql://{}:{}@{}:{}/{}",
+				self.user, self.password, self.address, self.port, self.name
 			)),
 			DB::PostgresSQL => Ok(format!(
-				"postgres://{}:{}@{}:{}",
-				self.user, self.password, self.address, self.port
+				"postgres://{}:{}@{}:{}/{}",
+				self.user, self.password, self.address, self.port, self.name
 			)),
 			DB::SQLite3 => Ok({
 				if self.address.starts_with("sqlite:") {
 					self.address.clone()
 				} else {
-					format!("sqlite://{}?mode=rwc", self.address)
+					format!("sqlite://{}?mode=rwc", self.name)
 				}
 			}),
 			DB::None => Err(()),

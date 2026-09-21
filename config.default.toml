@@ -1,9 +1,10 @@
 [db]
 db = ""
-address = "srvpro3.db"
+address = ""
 user = ""
 port = ""
 password = ""
+name = ""
 
 [redis]
 address = ""
@@ -63,7 +64,6 @@ timeout = 5
 reload = 1800
 expansions = ["ygopro"]
 ypk = true
-lflist = ""
 
 [cards.excode]
 8512558 = [0x8f, 0x54, 0x59, 0x82, 0x13a]
