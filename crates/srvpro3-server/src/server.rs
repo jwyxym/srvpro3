@@ -9,6 +9,7 @@ mod transport;
 mod reconnect;
 mod resilience;
 mod spectate;
+mod seating;
 mod cloud_replay;
 mod bot;
 mod tournament;
@@ -391,6 +392,7 @@ impl Server {
 			if watch { configuration.enable_plugin(spectate::NAME); }
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
+			configuration.enable_plugin(seating::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));
 			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration { mode: ReplayMode::empty() });
 			let mut host = DuelHost::new(options.host_info, configuration);
