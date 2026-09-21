@@ -57,6 +57,16 @@ jobs:
           cache: npm
           cache-dependency-path: srvpro3-front/package-lock.json
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './ -> target'
+
       - name: Install frontend dependencies
         working-directory: srvpro3-front
         run: npm ci
@@ -65,17 +75,8 @@ jobs:
         working-directory: srvpro3-front
         run: npm run build
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-
       - name: Build release binary
-        run: cargo build --release -p srvpro3
+        run: cargo build --release
 
       - name: Package
         shell: pwsh
