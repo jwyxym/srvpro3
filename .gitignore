@@ -1,6 +1,6 @@
-target
-ygopro
-windbot
-webui
+/target
+/ygopro
+/windbot
+/webui
+/config.toml
 *.db
-config.toml
