@@ -24,49 +24,33 @@ async fn load(connection: &Connection) -> Result<Replay> {
 	ensure!(reconnect::version(connection) == Some(*ygopro::plugin::version_check::PRO_VERSION), "客户端协议版本不匹配");
 	let record = tokio::time::timeout(Duration::from_secs(10), srvpro3_database::history::read::by_id(id))
 		.await.context("查询云录像超时")??.context("未找到该历史记录")?;
-	let encoded = record.replay.context("该历史记录没有录像")?;
-	tokio::task::spawn_blocking(move || {
-		ensure!(encoded.len() <= MAX_REPLAY, "录像文件过大");
-		let forge = encoded.strip_prefix(super::history::REPLAY_PREFIX);
-		let encoded = forge.unwrap_or(&encoded);
-		let compressed = STANDARD.decode(encoded).context("录像 Base64 格式无效")?;
-		let mut buffer = Vec::new();
-		GzDecoder::new(compressed.as_slice()).take(MAX_REPLAY as u64 + 1)
-			.read_to_end(&mut buffer).context("解压录像失败")?;
-		ensure!(buffer.len() <= MAX_REPLAY, "录像解压后过大");
-		let mut players = vec![(0, record.player_a), (1, record.player_b)];
-		let mut tag = false;
-		if forge.is_some() {
-			let converted = decode_forge(&buffer)?;
-			players = converted.0;
-			tag = players.len() == 4;
-			buffer = converted.1;
-		}
-		let mut offset = 0;
-		let mut info = None;
-		while offset < buffer.len() {
-			ensure!(buffer.len() - offset >= 2, "录像消息长度头不完整");
-			let length = u16::from_le_bytes([buffer[offset], buffer[offset + 1]]) as usize;
-			offset += 2;
-			ensure!(length > 0 && length <= buffer.len() - offset, "录像消息长度无效");
-			let mut cursor = Cursor::new(&buffer[offset..offset + length]);
-			let message = stoc::Message::read_le(&mut cursor).context("录像消息解析失败")?;
-			ensure!(cursor.position() == length as u64, "录像消息存在多余数据");
-			let stoc::Message::GameMessage(game) = message else { anyhow::bail!("录像包含非游戏消息"); };
-			if info.is_none() {
-				let gm::Message::Start(start) = game.message else { anyhow::bail!("录像缺少 START 消息"); };
-				ensure!(start.player_type & 0x10 != 0, "录像不是观战视角");
-				let start_lp = u32::try_from(start.player1_lp).context("录像初始生命值无效")?;
-				info = Some(HostInfo { lflist: 0, duel_rule: start.rule, start_lp, mode: if tag { Mode::Tag } else { Mode::Single }, ..HostInfo::default() });
-			}
-			offset += length;
-		}
-		Ok(Replay { players, info: info.context("录像内容为空")?, buffer })
-	}).await.context("读取录像任务失败")?
+	tokio::task::spawn_blocking(move || decode_record(record)).await.context("读取录像任务失败")?
 }
 
-/// 上游 .yrp3d 通过 BinRead 解析；转换为普通客户端可接收的 STOC_GAME_MSG。
-fn decode_forge(buffer: &[u8]) -> Result<(Vec<(u8, String)>, Vec<u8>)> {
+fn decode_record(record: srvpro3_database::history::Model) -> Result<Replay> {
+	let buffer = unpack(record.replay.as_deref().context("该历史记录没有录像")?)?;
+	decode_forge(&buffer)
+}
+
+fn unpack(encoded: &str) -> Result<Vec<u8>> {
+	ensure!(encoded.len() <= MAX_REPLAY, "录像文件过大");
+	let encoded = encoded.strip_prefix(super::history::REPLAY_PREFIX).context("不支持旧版观战帧，请下载新保存的 .yrp3d 录像")?;
+	let compressed = STANDARD.decode(encoded).context("录像 Base64 格式无效")?;
+	let mut buffer = Vec::new();
+	GzDecoder::new(compressed.as_slice()).take(MAX_REPLAY as u64 + 1)
+		.read_to_end(&mut buffer).context("解压录像失败")?;
+	ensure!(buffer.len() <= MAX_REPLAY, "录像解压后过大");
+	Ok(buffer)
+}
+
+/// 返回数据库中的原始 .yrp3d 文件；调用方应在阻塞线程中执行。
+pub fn export(record: srvpro3_database::history::Model) -> Result<Vec<u8>> {
+	let buffer = unpack(record.replay.as_deref().context("该历史记录没有录像")?)?;
+	parse_forge(&buffer)?;
+	Ok(buffer)
+}
+
+fn parse_forge(buffer: &[u8]) -> Result<ygopro_data::data::forge::Replay> {
 	// 先检查上游记录的长度字段，避免损坏数据让解析器按伪造长度分配内存。
 	let mut offset = 0;
 	while offset < buffer.len() {
@@ -79,6 +63,14 @@ fn decode_forge(buffer: &[u8]) -> Result<(Vec<(u8, String)>, Vec<u8>)> {
 	let mut cursor = Cursor::new(buffer);
 	let replay = ygopro_data::data::forge::Replay::read_le(&mut cursor).context("解析上游 .yrp3d 录像失败")?;
 	ensure!(cursor.position() == buffer.len() as u64, ".yrp3d 存在多余数据");
+	ensure!(matches!(replay.messages.first(), Some(gm::Message::SibylName(_))), ".yrp3d 缺少玩家信息");
+	ensure!(matches!(replay.messages.get(1), Some(gm::Message::Start(start)) if start.player_type & 0x10 != 0), ".yrp3d 缺少观战 START");
+	Ok(replay)
+}
+
+/// 云播放时临时生成网络消息，不存储观战帧。
+fn decode_forge(buffer: &[u8]) -> Result<Replay> {
+	let replay = parse_forge(buffer)?;
 	let Some(gm::Message::SibylName(names)) = replay.messages.first() else { anyhow::bail!(".yrp3d 缺少玩家信息"); };
 	let mut players = vec![(0, names.host_name.to_string())];
 	let tag = !names.host_tag_name.to_string().is_empty() || !names.client_tag_name.to_string().is_empty();
@@ -89,6 +81,12 @@ fn decode_forge(buffer: &[u8]) -> Result<(Vec<(u8, String)>, Vec<u8>)> {
 	} else {
 		players.push((1, names.client_name.to_string()));
 	}
+	let Some(gm::Message::Start(start)) = replay.messages.get(1) else { anyhow::bail!("录像缺少 START"); };
+	let info = HostInfo {
+		lflist: 0, duel_rule: start.rule,
+		start_lp: u32::try_from(start.player1_lp).context("录像初始生命值无效")?,
+		mode: if tag { Mode::Tag } else { Mode::Single }, ..HostInfo::default()
+	};
 	let mut frames = Vec::new();
 	for message in replay.messages.into_iter().skip(1) {
 		ensure!(!matches!(message, gm::Message::SibylName(_) | gm::Message::SibylChat(_) | gm::Message::SibylReplay(_)), ".yrp3d 包含非观战消息");
@@ -99,7 +97,7 @@ fn decode_forge(buffer: &[u8]) -> Result<(Vec<(u8, String)>, Vec<u8>)> {
 		frames.extend_from_slice(&length.to_le_bytes());
 		frames.extend_from_slice(&frame);
 	}
-	Ok((players, frames))
+	Ok(Replay { players, info, buffer: frames })
 }
 
 // 等待发送空间时同时处理退出，避免补发期间堵塞客户端输入。

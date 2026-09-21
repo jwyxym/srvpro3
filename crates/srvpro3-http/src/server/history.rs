@@ -1,4 +1,4 @@
-use axum::{extract::{Json, Query}, http::StatusCode};
+use axum::{extract::{Json, Query}, http::{header, StatusCode}, response::{IntoResponse, Response}};
 use serde::{Deserialize, Serialize};
 use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
 
@@ -6,6 +6,39 @@ use super::query::ListQuery;
 
 use srvpro3_database::history::Model;
 use srvpro3_config::Config;
+
+static DOWNLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
+#[derive(Deserialize)]
+pub struct DownloadQuery {
+	pub id: i64,
+}
+
+pub async fn download(Query(query): Query<DownloadQuery>) -> Result<Response, (StatusCode, &'static str)> {
+	check()?;
+	if query.id <= 0 { return Err((StatusCode::BAD_REQUEST, "历史记录 ID 必须为正整数")); }
+	let permit = DOWNLOADS.try_acquire().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "录像下载繁忙，请稍后重试"))?;
+	let _db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
+	let record = tokio::time::timeout(std::time::Duration::from_secs(10), srvpro3_database::history::read::by_id(query.id))
+		.await.map_err(|_| (StatusCode::GATEWAY_TIMEOUT, "查询录像超时"))?
+		.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "查询录像失败"))?
+		.ok_or((StatusCode::NOT_FOUND, "历史记录不存在"))?;
+	if record.replay.as_ref().is_none_or(|value| value.is_empty()) {
+		return Err((StatusCode::NOT_FOUND, "该历史记录没有录像"));
+	}
+	let bytes = tokio::task::spawn_blocking(move || {
+		let _permit = permit;
+		srvpro3_server::export_replay(record)
+	}).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "录像导出任务失败"))?
+		.map_err(|error| {
+			log::warn!("导出历史录像 {} 失败：{error:#}", query.id);
+			(StatusCode::UNPROCESSABLE_ENTITY, "录像数据损坏或格式不支持，无法导出")
+		})?;
+	Ok(([
+		(header::CONTENT_TYPE, "application/octet-stream".to_owned()),
+		(header::CONTENT_DISPOSITION, format!("attachment; filename=\"replay-{}.yrp3d\"", query.id)),
+	], bytes).into_response())
+}
 
 #[derive(Serialize)]
 pub struct ListResponse {

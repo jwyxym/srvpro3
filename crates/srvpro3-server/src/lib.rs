@@ -3,3 +3,4 @@ mod server;
 pub mod rooms;
 
 pub use init::{init, reload, reload_cards, shutdown};
+pub use server::export_replay;

@@ -11,6 +11,7 @@ mod resilience;
 mod spectate;
 mod seating;
 mod cloud_replay;
+pub use cloud_replay::export as export_replay;
 mod bot;
 mod tournament;
 

@@ -16,10 +16,14 @@
 					</div>
 				</template></el-table-column>
 				<el-table-column prop = 'id' label = 'ID' width = '90'/>
-				<el-table-column prop = 'room_id' label = '房间号' min-width = '130'/>
+				<el-table-column prop = 'room_id' label = '房间号' min-width = '130'>
+					<template #default = '{ row }'>
+						<el-button link type = 'primary' :aria-label = '`复制房间号 ${row.room_id}`' title = '点击复制房间号' @click = 'page.copy_room_id(row.room_id)'>{{ row.room_id }}</el-button>
+					</template>
+				</el-table-column>
 				<el-table-column label = '录像' min-width = '110'>
 					<template #default = '{ row }'>
-						<el-text v-if = 'row.replay' type = 'primary' class = 'replay_pass' role = 'button' tabindex = '0' :aria-label = '`复制录像口令 R#${row.id}`' @click = 'page.copy_replay_pass(row.id)' @keydown.enter.prevent = 'page.copy_replay_pass(row.id)' @keydown.space.prevent = 'page.copy_replay_pass(row.id)'>R#{{ row.id }}</el-text>
+						<el-button v-if = 'row.replay' link type = 'primary' :loading = 'page.downloading === row.id' :disabled = 'page.downloading !== null && page.downloading !== row.id' :aria-label = '`下载回放 R#${row.id}`' title = '点击下载回放' @click = 'page.download_replay(row.id)'>R#{{ row.id }}</el-button>
 					</template>
 				</el-table-column>
 				<el-table-column prop = 'player_a' label = '玩家 A' min-width = '160'>
@@ -63,11 +67,35 @@
 		loading : false,
 		error : '',
 		deleting : null as number | 'all' | null,
-		copy_replay_pass : async (id : number) => {
+		downloading : null as number | null,
+		download_replay : async (id : number) => {
+			if (page.downloading !== null || controller.signal.aborted) return;
+			page.downloading = id;
 			try {
-				await navigator.clipboard.writeText(`R#${id}`);
-				ElMessage.success('录像口令已复制');
-			} catch {}
+				const path = '/history/replay';
+				const query = new URLSearchParams({ id : String(id) });
+				const response = await fetch(path + await admin.to_query(path, 'GET', query, controller.signal), { signal : controller.signal });
+				if (!response.ok) throw new Error(await response.text() || `下载失败：${response.status}`);
+				const blob = await response.blob();
+				if (controller.signal.aborted) return;
+				const url = URL.createObjectURL(blob);
+				const link = document.createElement('a');
+				link.href = url;
+				link.download = `replay-${id}.yrp3d`;
+				document.body.appendChild(link);
+				try { link.click(); } finally {
+					link.remove();
+					window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+				}
+			} catch (error) {
+				if (!controller.signal.aborted) ElMessage.error(error instanceof Error ? error.message : '录像下载失败');
+			} finally { page.downloading = null; }
+		},
+		copy_room_id : async (id : string) => {
+			try {
+				await navigator.clipboard.writeText(id);
+				ElMessage.success('房间号已复制');
+			} catch { ElMessage.error('房间号复制失败'); }
 		},
 		delete_history : async (id? : number) => {
 			if (page.deleting !== null) return;
@@ -164,6 +192,6 @@
 			p { color: var(--el-text-color-secondary); }
 		}
 		.pagination { overflow-x: auto; }
-		.player_name, .replay_pass { cursor: pointer; }
+		.player_name { cursor: pointer; }
 	}
 </style>

@@ -60,6 +60,7 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/room", get(room::list))
 		.route("/room", delete(room::interrupt))
 		.route("/history", get(history::list))
+		.route("/history/replay", get(history::download))
 		.route("/history", post(history::create))
 		.route("/history", put(history::update))
 		.route("/history", delete(history::delete))
