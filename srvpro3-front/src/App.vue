@@ -4,9 +4,17 @@
 	</el-config-provider>
 </template>
 <script setup lang = 'ts'>
-	import { onUnmounted } from 'vue';
+	import { onUnmounted, onMounted } from 'vue';
+	import { ElMessage } from 'element-plus';
 	import * as ws from './script/ws';
 	import './script/height';
+	onMounted(() => {
+		if (window.location.protocol === 'http:' && !__DEV__)
+			ElMessage({
+				message: '当前正在使用http协议，在生产环境使用此协议具有安全隐患',
+				type: 'warning',
+			});
+	})
 	onUnmounted(() => {
 		ws.close();
 	})
