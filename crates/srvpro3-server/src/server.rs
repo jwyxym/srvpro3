@@ -394,7 +394,12 @@ impl Server {
 			configuration.enable_plugin(resilience::NAME);
 			configuration.enable_plugin(seating::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));
-			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration { mode: ReplayMode::empty() });
+			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration {
+				mode: ReplayMode::empty(),
+				save_path: "replays".into(),
+				file_template: "%Y-%m-%d %H-%M-%S {players}".into(),
+				format: ygopro::plugin::replay::Format::Raw,
+			});
 			let mut host = DuelHost::new(options.host_info, configuration);
 			let finish_signal =
 				<DuelHost as RoomProvider<ctos::Message, Complex<stoc::Message>>>::get_finish_signal(&mut host);

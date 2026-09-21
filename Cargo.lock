@@ -4880,15 +4880,16 @@ checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "ygopro"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6807edf7c8ff79a7829d9b7896e51097c96283bfb6d7a7226af58378d1209929"
+checksum = "bd660363a18d2aa2485a773fc5e087b9e2a311aa8d64747579363ee3b2f6b062"
 dependencies = [
  "anymap3",
  "arc-swap",
  "base64",
  "binrw",
  "bytes",
+ "chrono",
  "env_logger",
  "futures",
  "glob",
@@ -4926,9 +4927,9 @@ dependencies = [
 
 [[package]]
 name = "ygopro-data"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4134c5355a623429cd42da9e3fc400a900ffbd2954ba77cc5eb03c1aa4b16fe4"
+checksum = "9872391775168bfc470e25d1ab033bdabcfe44d1423943e5b276c1bb35aec02e"
 dependencies = [
  "binrw",
  "bitflags 2.13.2",
