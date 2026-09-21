@@ -1,6 +1,6 @@
 target
 ygopro
 windbot
-dist
+webui
 *.db
 config.toml
