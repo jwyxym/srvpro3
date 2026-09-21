@@ -16,6 +16,18 @@ export interface Room {
 }
 export const state = reactive({ connected : false, rooms : [] as Room[] });
 let connection_url = '';
+let connection_controller : AbortController | undefined;
+
+const wait_retry = (signal : AbortSignal) => new Promise<void>(resolve => {
+	if (signal.aborted) { resolve(); return; }
+	const finish = () => {
+		clearTimeout(timer);
+		signal.removeEventListener('abort', finish);
+		resolve();
+	};
+	const timer = setTimeout(finish, 5000);
+	signal.addEventListener('abort', finish, { once : true });
+});
 
 export const close = () => {
 	const socket = ws;
@@ -28,6 +40,8 @@ export const close = () => {
 		socket.close();
 		emitter.emit('close');
 	}
+	connection_controller?.abort();
+	connection_controller = undefined;
 };
 
 export const connect = () : void => {
@@ -37,8 +51,28 @@ export const connect = () : void => {
 	if (ws && connection_url === identity) return;
 	close();
 	connection_url = identity;
+	const controller = new AbortController();
+	connection_controller = controller;
 	const socket = new ReconnectingWebSocket(async () => {
-		url.search = await admin.to_query('/ws');
+		// URL 获取失败不能抛给重连库，否则其连接锁不会释放。
+		while (!controller.signal.aborted) {
+			const request_controller = new AbortController();
+			const abort = () => request_controller.abort();
+			controller.signal.addEventListener('abort', abort, { once : true });
+			const timer = setTimeout(abort, 10000);
+			try {
+				url.search = await admin.to_query('/ws', 'GET', undefined, request_controller.signal);
+				return url.href;
+			} catch {
+				if (controller.signal.aborted) break;
+				state.connected = false;
+			} finally {
+				clearTimeout(timer);
+				controller.signal.removeEventListener('abort', abort);
+			}
+			await wait_retry(controller.signal);
+		}
+		// 主动关闭时正常结束 URL 获取，重连库会依据 close 状态跳过建连。
 		return url.href;
 	});
 	ws = socket;
