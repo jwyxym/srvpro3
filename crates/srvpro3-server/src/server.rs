@@ -8,6 +8,7 @@ mod player;
 mod transport;
 mod reconnect;
 mod resilience;
+mod spectate;
 mod bot;
 mod tournament;
 
@@ -364,6 +365,7 @@ impl Server {
 			}
 		}
 		let add_auto_bot: bool = options.auto_bot && !self.rooms.contains_key(&room_id);
+		let repaly = srvpro3_config::get()?.server.repaly;
 
 		let room_id_for_finish: String = room_id.clone();
 		let record_room_id: String = if admission.is_some() { room_id.clone() } else { connection.handshake.pass.clone() };
@@ -374,6 +376,7 @@ impl Server {
 			record.lock().unwrap().tournament = admission.as_ref().map(tournament::Admission::create_room);
 			let mut configuration: ygopro::Configuration = ygopro::Configuration::default();
 			options.configure(&mut configuration);
+			if repaly { configuration.enable_plugin(spectate::NAME); }
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));

@@ -1,74 +1,115 @@
 [db]
+# 数据库类型：sqlite3、mysql、postgres；留空禁用数据库
 db = ""
+# MySQL/Postgres 主机地址；SQLite 可填写完整 sqlite: 连接地址，否则使用 name 作为文件路径
 address = ""
+# MySQL/Postgres 数据库账号；SQLite 不使用此项
 user = ""
+# MySQL/Postgres 端口，以字符串填写；SQLite 不使用此项
 port = ""
+# MySQL/Postgres 数据库密码；SQLite 不使用此项
 password = ""
+# MySQL/Postgres 数据库名称（需预先建库）；SQLite 文件路径，文件不存在时创建
 name = ""
 
 [redis]
+# Redis 主机地址；留空禁用 Redis，不要带 redis:// 前缀
 address = ""
-port = ""
+# Redis 端口，以数字填写，默认 6379
+port = 6379
+# Redis 密码；无需密码时留空
 password = ""
+# Redis 数据库编号，以字符串填写；留空不指定编号
 db = ""
 
 [http_api]
+# HTTP 监听端口；0 表示不启用 HTTP 服务
 port = 8080
+# 是否启用房间查询和中止接口；房间 WS 也要求此项开启
 room = true
+# 是否启用 WebUI 静态资源及主机监控相关功能
 webui = true
+# 是否启用历史记录接口；还需要启用数据库
 history = true
 
 [http_api.user]
-#permissions 1=只读 2=只写 3=读写
+# permissions：0=无权限、1=只写、2=只读、3=读写；也支持 "write"、"read"、"sudo"
+# 账号 user；部署前设置非空强密码，permissions 为接口操作权限
 user = { password = "", permissions = 3 }
 
+# 对局服务器默认规则；房间密码中的规则前缀可覆盖相应默认值
 [server]
+# 是否允许中途观战普通对局；默认开启，在新建房间时生效，比赛房间仍受身份限制
+repaly = true
+# 对局中断线玩家的重连保留时间（秒）；0 禁用，等待房间和观战者不保留座位
 reconnect_timeout = 180
+# 换副阶段超时时间（秒）；0 禁用超时处理
 side_timeout = 180
+# 默认 BO 局数，允许 1 到 253 的奇数；1 为单局，3 为三局两胜
 bo = 1
+# 默认禁限卡表索引，从 0 开始；-1 为无禁限
 lflist = -1
-#ot 0=OCG-ONLY, 1=TCG-ONLY, 2=SC-ONLY, 3=CUSTOM-ONLY, 4=NO-UNIQUE, 5=ALL
+# ot 0=OCG-ONLY, 1=TCG-ONLY, 2=SC-ONLY, 3=CUSTOM-ONLY, 4=NO-UNIQUE, 5=ALL
+# 允许的卡片范围，取值对应上方说明；5 为全部允许
 ot = 5
+# 是否洗牌；false 对应不洗牌规则
 shuffle = true
+# 默认大师规则版本：1 到 5，5 为大师规则 2020
 master_rule = 5
+# 每回合通常抽卡数
 draw_count = 1
+# 开局起手数量
 start_hand = 5
+# 每回合时间（秒）；0 不限时，当前实现最大按 999 秒处理
 time_limit = 180
+# 默认初始生命值
 start_lp = 8000
 
 [server.tcp]
+# TCP 监听端口；0 禁用此协议
 port = 7911
 [server.udp]
+# KCP 的 UDP 监听端口；0 禁用此协议
 port = 7913
 [server.ws]
+# 对局 WebSocket 监听端口；0 禁用此协议
 port = 7912
 
 [tournament]
-# 空密码按报名昵称和当前排表匹配；非空密码按房间号进入，赛事房间会校验参赛身份
-# 玩家名称仅使用 $ 前的部分，例如 昵称$111 显示并匹配为 昵称
+# 是否启用比赛匹配
 enabled = false
+# 排表 API 地址
 url = "https://api-tabulator.moecube.com:444/api/srvpro"
-# 排表系统的 API Key，对应接口中的 api_key；不要提交真实 token
+# 排表 API Key
 token = ""
+# 排表系统中的比赛 ID，启用前替换为实际 ID
 tournament_id = 0
+# 比赛使用的 BO 局数，独立于 server.bo
 bo = 3
-# 赛事房间号：BO1 为 对局ID，BO3 为 M#对局ID，其余为 BO局数#对局ID
 # 校验登记的 UpdateDeck Base64 卡组；启用时未登记卡组不能入房
+# 是否校验选手提交的卡组与排表登记卡组一致
 check_deck = true
+# 是否向排表系统自动回传比赛成绩
 post_score = true
 # 接口超时（秒，1 到 60）；成绩失败最多尝试三次
+# 排表请求及成绩回传的超时时间（秒）
 timeout = 5
 
 [cards]
-# 自动重载间隔（秒），默认 30 分钟，小于等于 0 为禁用
+# 自动重载间隔（秒），默认 30 分钟；<=0 禁用，主动 reload 后重新计时
 reload = 1800
+# 按顺序扫描的资源目录；加载目录中的 .cdb、*lflist.conf，并从 script 子目录查找脚本
 expansions = ["ygopro"]
+# 是否加载资源目录中的 .ypk 和 .zip 卡包
 ypk = true
 
+# 额外 setcode 配置
 [cards.excode]
 8512558 = [0x8f, 0x54, 0x59, 0x82, 0x13a]
 55088578 = [0x8f, 0x54, 0x59, 0x82, 0x13a]
 
 [windbot]
+# WindBot 所在目录；留空禁用
 path = "windbot"
+# WindBot HTTP 服务端口
 port = 2399

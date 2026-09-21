@@ -1,4 +1,4 @@
-use std::{net::IpAddr, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::Duration};
+use std::{collections::VecDeque, net::IpAddr, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::Duration};
 use futures::{Stream, StreamExt};
 use tokio::{sync::{mpsc, watch}, time::Instant};
 use ygopro_data::{complex::Complex, constants::{Color, DuelStage, Netplayer}, data::Deck, message::{ctos, stoc, gm}};
@@ -95,8 +95,13 @@ pub async fn run(
 	let mut duel_number = 0;
 	let mut closing = None;
 	let mut udp_leave_sent = false;
+	let mut pending_observer: VecDeque<Vec<u8>> = VecDeque::new();
 	loop {
+		let observer = record.lock().unwrap().players.get(&id)
+			.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
+		// 房间移除后引擎流中可能仍有观战补发消息，以流耗尽作为发送完成标志。
 		if live.is_none() {
+			pending_observer.clear();
 			if deadline.is_none() {
 				let eligible = {
 					let record = record.lock().unwrap();
@@ -110,8 +115,22 @@ pub async fn run(
 			}
 			available.store(closing.is_none(), Ordering::Release);
 		}
+		let observer_outgoing = live.as_ref().filter(|_| !pending_observer.is_empty()).map(|socket| socket.outgoing.clone());
 		tokio::select! {
-			message = engine_output.next() => {
+			// 队列拥堵时暂停读取后续补发消息，仍处理退出和房间结束通知。
+			permit = async move {
+				observer_outgoing.unwrap().reserve_owned().await
+			}, if live.is_some() && !pending_observer.is_empty() => {
+				match permit {
+					Ok(permit) => {
+						if let Some(frame) = pending_observer.pop_front() {
+							permit.send(frame);
+						}
+					}
+					Err(_) => live = None,
+				}
+			}
+			message = engine_output.next(), if pending_observer.is_empty() => {
 				let Some(mut message) = message else { break };
 				if record.lock().unwrap().tournament.is_some() {
 					// 赛事由服务器自动开局，主持人转移及重连时也不向客户端授予房主权限。
@@ -142,6 +161,13 @@ pub async fn run(
 					if matches!(value, stoc::Message::TypeChange(_)) { record.update_info(&rooms, &room_id); }
 				}
 				if let Some(socket) = live.as_ref().filter(|socket| socket.verified) {
+					let observer = record.lock().unwrap().players.get(&id)
+						.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
+					if observer {
+						// 逐条排队，UDP 的 LEAVE_GAME 留到整个输出流耗尽之后发送。
+						pending_observer.push_back(message.data.to_vec());
+						continue;
+					}
 					// 慢连接也不能阻塞房间结束或保留座位计时。
 					if socket.outgoing.try_send(message.data.to_vec()).is_err() {
 						live = None;
@@ -153,13 +179,13 @@ pub async fn run(
 				}
 			}
 			_ = finished.changed(), if closing.is_none() => {
-				// 允许引擎桥接任务转发最后的消息，但不无限等待后台任务退出。
+				// 普通玩家保留结束宽限期；观战者继续排空引擎消息流。
 				available.store(false, Ordering::Release);
 				closing = Some(Instant::now() + Duration::from_secs(1));
 			}
 			_ = async {
 				match closing { Some(time) => tokio::time::sleep_until(time).await, None => std::future::pending().await }
-			} => {
+			}, if !observer => {
 				break;
 			}
 			_ = async {
@@ -214,6 +240,8 @@ pub async fn run(
 					continue;
 				}
 				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
+				// 引擎已结束时不再转发观战输入，避免发送失败截断剩余输出。
+				if observer && (closing.is_some() || !rooms.read().contains_key(&room_id)) { continue; }
 				if record.lock().unwrap().tournament.is_some() && super::tournament::blocked_input(&message) {
 					let _ = socket.outgoing.try_send(bytes(stoc::Chat { player: Color::Red.into(), msg: "比赛房间不允许更改座位、踢人或手动开局。".into() }.into()));
 					continue;
@@ -249,7 +277,13 @@ pub async fn run(
 	if let Some((protocol, position, outgoing, close)) = player {
 		if protocol == Protocol::Udp {
 			if !udp_leave_sent {
-				let _ = tokio::time::timeout(Duration::from_millis(200), outgoing.send(bytes(stoc::LeaveGame { pos: position }.into()))).await;
+				let leave = bytes(stoc::LeaveGame { pos: position }.into());
+				if matches!(position, Netplayer::Observer(_)) {
+					// 排在全部剩余消息后，不能因短暂队列拥堵丢掉离场通知。
+					let _ = outgoing.send(leave).await;
+				} else {
+					let _ = tokio::time::timeout(Duration::from_millis(200), outgoing.send(leave)).await;
+				}
 			}
 			// 为 KCP 留出发送离场消息的时间，避免关闭会话时丢掉待发送数据。
 			tokio::time::sleep(Duration::from_millis(200)).await;

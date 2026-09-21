@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct Config {
+	#[serde(alias = "servers")]
 	pub server: Server,
 	pub db: Database,
 	#[serde(alias = "api")]
