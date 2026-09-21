@@ -94,9 +94,18 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 		.context("提交进房请求超时（10 秒）")?
 		.context("房间服务接收通道已关闭")?;
 	let result: Result<()> = async {
+		let mut heartbeat = if protocol == Protocol::Udp {
+			Some(udp::heartbeat::Heartbeat::start(&mut output).await?)
+		} else { None };
 		let mut accepting_input = true;
 		let mut close_observed = false;
+		let mut leave_deadline = None;
 		loop {
+			if let Some(heartbeat) = heartbeat.as_mut() {
+				if heartbeat.deadline <= tokio::time::Instant::now() { heartbeat.tick(&mut output).await?; }
+			}
+			// 绝对截止时间不随其他业务包重置。
+			let heartbeat_deadline = heartbeat.as_ref().map(|heartbeat| heartbeat.deadline).or(leave_deadline);
 			tokio::select! {
 				close = &mut close_rx, if !close_observed => {
 					close_observed = true;
@@ -107,6 +116,14 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 						break;
 					}
 				}
+				_ = async {
+					match heartbeat_deadline {
+						Some(deadline) => tokio::time::sleep_until(deadline).await,
+						None => std::future::pending().await,
+					}
+				} => {
+					if let Some(heartbeat) = heartbeat.as_mut() { heartbeat.tick(&mut output).await?; } else { break; }
+				}
 				frame = async {
 					if let Some(duration) = idle {
 						timeout(duration, input.next()).await.map_err(Error::from)
@@ -115,10 +132,23 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 					}
 				}, if accepting_input => {
 					let Some(frame) = frame? else { break; };
-					match incoming_tx.try_send(frame?) {
+					let frame = frame?;
+					let udp_leave = protocol == Protocol::Udp
+						&& frame.as_slice() == [u8::from(ctos::MessageType::LeaveGame)];
+					if let Some(heartbeat) = heartbeat.as_mut() {
+						if heartbeat.receive(&frame, &mut output).await? { continue; }
+					}
+					match incoming_tx.try_send(frame) {
 						Ok(()) => {}
 						Err(mpsc::error::TrySendError::Closed(_)) => accepting_input = false,
 						Err(error) => return Err(error.into()),
+					}
+					if udp_leave {
+						// 停止心跳和收包，但继续发送房间返回的 STOC.LEAVE_GAME。
+						// 不能在这里等待 incoming 关闭，否则确认消息会滞留发送队列。
+						accepting_input = false;
+						heartbeat = None;
+						leave_deadline = Some(tokio::time::Instant::now() + TIMEOUT);
 					}
 				}
 				frame = outgoing_rx.recv() => {
@@ -130,6 +160,8 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 		}
 		Ok(())
 	}.await;
+	// 心跳超时时先通知房间连接已关闭，再清理底层传输。
+	if protocol == Protocol::Udp { drop(incoming_tx); }
 	let _ = timeout(TIMEOUT, output.close()).await;
 	result
 }

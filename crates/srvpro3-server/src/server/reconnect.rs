@@ -235,6 +235,10 @@ pub async fn run(
 		}
 	}
 	available.store(false, Ordering::Release);
+	// 先结束引擎输入并更新房间列表，不让 UDP 传输清理延迟玩家离房。
+	// DuelHost 在输入流结束时发送 LeaveGame，移除座位并销毁空房间。
+	drop(engine_input);
+	connected(&record, &rooms, &room_id, id, false);
 	// 引擎结束不等于传输连接结束：历史记录仍可能持有 outgoing，必须主动关闭。
 	let player = {
 		let mut record = record.lock().unwrap();
@@ -262,6 +266,4 @@ pub async fn run(
 			let _ = close.send(());
 		}
 	}
-	connected(&record, &rooms, &room_id, id, false);
-	// 丢弃 engine_input 使 DuelHost 的长期桥接流结束，只在此时向引擎离场。
 }
