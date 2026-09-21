@@ -7,17 +7,24 @@ use std::{
 };
 use anyhow::{Context, Error, ensure};
 use libloading::Library;
+use serde::Deserialize;
 
 type List = unsafe extern "C" fn() -> *mut c_char;
 type Free = unsafe extern "C" fn(*mut c_char);
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct BotInfo {
 	pub name: String,
+	#[serde(rename = "deck", alias = "ai_name")]
 	pub ai_name: String,
 	pub dialog: String,
+}
+
+#[derive(Deserialize)]
+struct BotFile {
+	windbots: Vec<BotInfo>,
 }
 
 fn library_path(path: &str) -> PathBuf {
@@ -31,9 +38,20 @@ fn library_path(path: &str) -> PathBuf {
 	path
 }
 
-/// 从 WindBot 动态库读取当前已加载的 Bot 列表。
+/// 优先读取配置的 bots.json；未配置文件时从本地动态库读取。
 pub fn list() -> Result<Vec<BotInfo>, Error> {
 	let config = srvpro3_config::get()?;
+	let bots_path = config.windbot.bots.clone();
+	if !bots_path.trim().is_empty() {
+		drop(config);
+		let json = std::fs::read_to_string(&bots_path)
+			.with_context(|| format!("读取 WindBot 列表文件失败：{bots_path}"))?;
+		let file: BotFile = serde_json::from_str(json.trim_start_matches('\u{feff}'))
+			.with_context(|| format!("解析 WindBot 列表文件失败：{bots_path}"))?;
+		ensure!(file.windbots.iter().all(|bot| !bot.name.trim().is_empty() && !bot.ai_name.trim().is_empty()), "WindBot 列表中的 name 和 deck 不能为空");
+		return Ok(file.windbots);
+	}
+	ensure!(!config.windbot.path.trim().is_empty(), "外部 WindBot 尚未配置机器人列表来源，无法随机选择或按名称匹配机器人");
 	let library_path = library_path(&config.windbot.path);
 	drop(config);
 	let library = unsafe { Library::new(&library_path) }

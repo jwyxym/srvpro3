@@ -6,11 +6,11 @@ use super::Bot;
 
 pub async fn add(bot: Bot) -> Result<(), Error> {
 	let config = srvpro3_config::get()?;
-	let path: String = config.windbot.path.clone();
+	let address: String = config.windbot.address.trim().to_owned();
 	let port: u16 = config.windbot.port;
 	drop(config);
-	ensure!(!path.trim().is_empty(), "WindBot 未启用");
 	ensure!(port != 0, "WindBot 未启用");
+	ensure!(!address.is_empty() && !address.contains(['/', '\\', '\r', '\n', ' ', '\t', '@']), "WindBot 地址必须是主机名或 IP 地址，不包含协议和路径");
 	ensure!(!bot.name.is_empty(), "bot 名称不能为空");
 	ensure!(!bot.host.is_empty(), "bot 目标地址不能为空");
 	ensure!(bot.port != 0, "bot 目标端口不能为 0");
@@ -27,10 +27,11 @@ pub async fn add(bot: Bot) -> Result<(), Error> {
 	if let Some(version) = bot.version { query.push(("version", version.to_string())); }
 	if let Some(hand) = bot.hand { query.push(("hand", hand.to_string())); }
 	let query: String = query.into_iter().map(|(key, value)| format!("{key}={}", encode(&value))).collect::<Vec<_>>().join("&");
-	let address: String = format!("127.0.0.1:{}", port);
-	let mut stream: TcpStream = timeout(Duration::from_secs(10), TcpStream::connect(&address)).await
+	let host = address.trim_start_matches('[').trim_end_matches(']');
+	let authority = if host.contains(':') { format!("[{host}]:{port}") } else { format!("{host}:{port}") };
+	let mut stream: TcpStream = timeout(Duration::from_secs(10), TcpStream::connect((host, port))).await
 		.context("连接 WindBot server 超时")??;
-	let request = format!("GET /?{query} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
+	let request = format!("GET /?{query} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");
 	timeout(Duration::from_secs(10), stream.write_all(request.as_bytes())).await
 		.context("向 WindBot server 发送添加 bot 请求超时")??;
 	let mut response: Vec<u8> = Vec::new();

@@ -109,7 +109,11 @@ ypk = true
 55088578 = [0x8f, 0x54, 0x59, 0x82, 0x13a]
 
 [windbot]
-# WindBot 所在目录；留空禁用
+# WindBot 本地动态库所在目录；留空时仅使用外部 HTTP 服务
 path = "windbot"
-# WindBot HTTP 服务端口
+# WindBot HTTP 服务主机地址，不包含协议和端口
+address = "127.0.0.1"
+# 机器人列表 JSON 文件路径；填写时优先读取，留空时使用本地动态库列表
+bots = ""
+# WindBot HTTP 服务端口；0 禁用本地启动和 HTTP 添加机器人
 port = 2399

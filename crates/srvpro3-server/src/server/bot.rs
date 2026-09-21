@@ -49,7 +49,7 @@ pub fn command(text: &str, record: &Arc<Mutex<RoomRecord>>, room_id: &str, id: u
 		check_room(&record.lock().unwrap())?;
 		let config = srvpro3_config::get()?;
 		ensure!(config.server.tcp.port != 0, "添加 WindBot 需要启用 TCP 服务");
-		ensure!(config.windbot.port != 0 && !config.windbot.path.trim().is_empty(), "WindBot 未启用");
+		ensure!(config.windbot.port != 0, "WindBot 未启用");
 		let port = config.server.tcp.port;
 		drop(config);
 		let mut invitations = INVITATIONS.lock().unwrap();

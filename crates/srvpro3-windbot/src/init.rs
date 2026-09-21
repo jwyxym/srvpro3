@@ -27,11 +27,17 @@ pub fn reload() -> Result<(), Error> {
 	let config = srvpro3_config::get()?;
 	let path: String = config.windbot.path.clone();
 	let port: u16 = config.windbot.port;
+	let address: String = config.windbot.address.clone();
+	drop(config);
 	let mut server: MutexGuard<'_, Option<Server>> = SERVER.lock()
 		.map_err(|_| anyhow::anyhow!("获取WindBot server状态锁错误"))?;
 	if path.trim().is_empty() || port == 0 {
 		if let Some(server) = server.take() { stop(server)?; }
-		warn!("未启用 WindBot，如需启用，请设置 config.toml 的 windbot.path");
+		if port == 0 {
+			warn!("未启用 WindBot，如需启用，请设置 config.toml 的 windbot.port");
+		} else {
+			info!("WindBot 使用外部 HTTP 服务：http://{address}:{port}，不加载本地动态库");
+		}
 		return Ok(());
 	}
 	if server.as_ref()
@@ -39,11 +45,11 @@ pub fn reload() -> Result<(), Error> {
 		return Ok(());
 	}
 	if let Some(server) = server.take() { stop(server)?; }
-	*server = Some(start(&path, port)?);
+	*server = Some(start(&path, address, port)?);
 	Ok(())
 }
 
-fn start(path: &str, port: u16) -> Result<Server, Error> {
+fn start(path: &str, address: String, port: u16) -> Result<Server, Error> {
 	let sqlite_path: String = path.to_string();
 	let path: PathBuf = PathBuf::from(path);
 	let library_path: PathBuf = {
@@ -80,8 +86,8 @@ fn start(path: &str, port: u16) -> Result<Server, Error> {
 		.name("windbot-server".into()).spawn(move || {
 		let arguments: CString = match CString::new(
 			format!(
-				"ServerMode=true ServerPort={port} ServerURL=127.0.0.1 SQLitePath=\"{}\" DbPath=\"{}\" ConsoleLog=false",
-				sqlite_path, db_path
+				"ServerMode=true ServerPort={} ServerURL={} SQLitePath=\"{}\" DbPath=\"{}\" ConsoleLog=false",
+				port, address, sqlite_path, db_path
 			)
 		) {
 			Ok(arguments) => arguments,
