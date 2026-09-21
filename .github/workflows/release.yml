@@ -117,6 +117,15 @@ jobs:
         with:
           files: artifacts/**/*.zip
 
+      - name: Prepare release-latest assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path latest | Out-Null
+          Get-ChildItem -Path artifacts -Filter '*.zip' -Recurse -File | ForEach-Object {
+            $platform = $_.Directory.Name
+            Copy-Item -LiteralPath $_.FullName -Destination "latest/srvpro3-release-latest-$platform.zip"
+          }
+
       - name: Delete previous release-latest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,4 +143,4 @@ jobs:
           name: release-latest
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: artifacts/**/*.zip
+          files: latest/*.zip
