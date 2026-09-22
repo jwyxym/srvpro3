@@ -44,28 +44,28 @@ indexmap = { version = "2.13.0", features = ["serde"] }
 libloading = "0.9.0"
 ygopro-derive = {
     git = "https://github.com/IamIpanda/ygopru",
-    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
 }
 ygopro = {
     git = "https://github.com/IamIpanda/ygopru",
-    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
     default-features = false,
     features = ["koishi", "forge"]
 }
 ygopro-data = {
     git = "https://github.com/IamIpanda/ygopru",
-    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
     default-features = false
 }
 ygopro-core-wrapper = {
     git = "https://github.com/IamIpanda/ygopru",
-    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
     default-features = false,
     features = ["koishi"]
 }
 ygopro-handler = {
     git = "https://github.com/IamIpanda/ygopru",
-    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
 }
 ygopro_cdb_reader = "0.1.5"
 
