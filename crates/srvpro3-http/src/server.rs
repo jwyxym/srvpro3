@@ -20,6 +20,12 @@ use srvpro3_log::*;
 
 pub use reload::register_reload;
 
+pub async fn prepare_auth() -> Result<(), Error> {
+	let enabled = srvpro3_config::get()?.http_api.port != 0;
+	if enabled { auth::crypto::init().await?; }
+	Ok(())
+}
+
 struct Server {
 	port: u16,
 	task: JoinHandle<()>

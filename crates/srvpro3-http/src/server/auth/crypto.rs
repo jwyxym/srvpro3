@@ -29,8 +29,10 @@ struct Payload {
 
 pub async fn init() -> anyhow::Result<()> {
 	KEY.get_or_try_init(|| async {
-		tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut OsRng, 2048)).await?
-			.map_err(anyhow::Error::from)
+		let started = Instant::now();
+		let key = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut OsRng, 2048)).await??;
+		srvpro3_log::info!("HTTP鉴权密钥生成完成，耗时 {} 毫秒", started.elapsed().as_millis());
+		Ok::<_, anyhow::Error>(key)
 	}).await?;
 	Ok(())
 }

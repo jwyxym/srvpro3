@@ -103,6 +103,12 @@ members = [
 	"crates/srvpro3-windbot"
 ]
 
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[profile.dev.package.rsa]
+opt-level = 3
+
 [backup]
 ygopro-derive = "0.1.1"
 ygopro = { version = "0.1.5", default-features = false, features = ["koishi", "forge"] }
