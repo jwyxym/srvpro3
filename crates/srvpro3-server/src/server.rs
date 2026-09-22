@@ -10,6 +10,7 @@ mod reconnect;
 mod resilience;
 mod spectate;
 mod seating;
+pub(crate) mod messages;
 mod cloud_replay;
 pub use cloud_replay::export as export_replay;
 mod bot;
@@ -114,10 +115,14 @@ impl Server {
 		let mut reporting = BTreeSet::new();
 		let mut closed_matches = BTreeMap::new();
 		let mut bot_cleanup = tokio::time::interval(Duration::from_secs(1));
+		let mut tips = messages::TipSchedule::new();
 		bot_cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 		loop {
 			tokio::select! {
-				_ = bot_cleanup.tick() => self.close_bot_only_rooms(),
+				_ = bot_cleanup.tick() => {
+					self.close_bot_only_rooms();
+					tips.tick(&self.rooms);
+				},
 				_ = &mut shutdown => {
 					self.leave_udp_clients().await;
 					// 端口重载不应取消已经结束的比赛成绩上传。
@@ -394,6 +399,7 @@ impl Server {
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
 			configuration.enable_plugin(seating::NAME);
+			configuration.enable_plugin(messages::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));
 			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration {
 				mode: ReplayMode::empty(),

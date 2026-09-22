@@ -7,7 +7,7 @@ edition = "2024"
 anyhow.workspace = true
 log.workspace = true
 tokio.workspace = true
-rustyline-async = "0.4.9"
+rustyline-async.workspace = true
 
 srvpro3-config.workspace = true
 srvpro3-cards.workspace = true

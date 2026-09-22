@@ -136,6 +136,7 @@ pub async fn init() -> Result<(), Error> {
 
 pub async fn reload() -> Result<(), Error> {
 	reload_cards()?;
+	super::server::messages::reload().await?;
 	let config: RwLockReadGuard<'_, RawRwLock, Config> = srvpro3_config::get()?;
 	let tcp_port: u16 = config.server.tcp.port;
 	let udp_port: u16 = config.server.udp.port;

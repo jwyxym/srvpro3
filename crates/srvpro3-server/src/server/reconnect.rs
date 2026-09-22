@@ -96,6 +96,7 @@ pub async fn run(
 	let mut closing = None;
 	let mut udp_leave_sent = false;
 	let mut pending_observer: VecDeque<Vec<u8>> = VecDeque::new();
+	let mut welcomed = false;
 	loop {
 		let observer = record.lock().unwrap().players.get(&id)
 			.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
@@ -139,7 +140,12 @@ pub async fn run(
 					}
 				}
 				let mut leave_position = None;
+				let mut welcome = Vec::new();
 				if let Ok(value) = message.try_get() {
+					if !welcomed && matches!(value, stoc::Message::JoinGame(_)) {
+						welcomed = true;
+						welcome = super::messages::welcome();
+					}
 					match value {
 						stoc::Message::JoinGame(_) => join_packet = Some(message.data.to_vec()),
 						stoc::Message::TypeChange(_) => type_packet = Some(message.data.to_vec()),
@@ -166,14 +172,18 @@ pub async fn run(
 					if observer {
 						// 逐条排队，UDP 的 LEAVE_GAME 留到整个输出流耗尽之后发送。
 						pending_observer.push_back(message.data.to_vec());
+						pending_observer.extend(welcome);
 						continue;
 					}
 					// 慢连接也不能阻塞房间结束或保留座位计时。
 					if socket.outgoing.try_send(message.data.to_vec()).is_err() {
 						live = None;
-					} else if socket.protocol == Protocol::Udp {
-						if let Some(position) = leave_position {
-							udp_leave_sent = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into())).is_ok();
+					} else {
+						for frame in welcome { if socket.outgoing.try_send(frame).is_err() { break; } }
+						if socket.protocol == Protocol::Udp {
+							if let Some(position) = leave_position {
+								udp_leave_sent = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into())).is_ok();
+							}
 						}
 					}
 				}
@@ -247,6 +257,7 @@ pub async fn run(
 					continue;
 				}
 				if let ctos::Message::Chat(chat) = &message {
+					if super::messages::command(&chat.msg, &socket.outgoing) { continue; }
 					if super::bot::command(&chat.msg, &record, &room_id, id) { continue; }
 				}
 				let kicked = if let ctos::Message::HsKick(kick) = &message { Some(kick.pos) } else { None };

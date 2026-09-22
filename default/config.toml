@@ -66,6 +66,12 @@ start_hand = 5
 time_limit = 180
 # 默认初始生命值
 start_lp = 8000
+# 欢迎
+welcome = ""
+# 提示
+tips = "default/tips.toml"
+# 召唤台词
+dialogues = ["default/dialogues.json"]
 
 [server.tcp]
 # TCP 监听端口；0 禁用此协议

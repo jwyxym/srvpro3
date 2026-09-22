@@ -1,0 +1,5 @@
+prefix = ""
+interval = 30
+tips = [
+    "输入 /tips 可以单独获取一条提示。"
+]

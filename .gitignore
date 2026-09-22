@@ -4,3 +4,4 @@
 /webui
 /config.toml
 *.db
+default/dialogues.json

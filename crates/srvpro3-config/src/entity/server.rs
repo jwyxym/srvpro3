@@ -4,6 +4,9 @@ use ygopro_data::constants::Rule;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Server {
+	pub welcome: String,
+	pub tips: String,
+	pub dialogues: Vec<String>,
 	pub watch: bool,
 	pub replay: bool,
 	pub tcp: Protocol,
@@ -26,6 +29,9 @@ pub struct Server {
 impl Default for Server {
 	fn default() -> Self {
 		Self {
+			welcome: String::new(),
+			tips: String::new(),
+			dialogues: Vec::new(),
 			watch: true,
 			replay: true,
 			tcp: Protocol::default(),

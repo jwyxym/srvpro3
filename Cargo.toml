@@ -42,6 +42,15 @@ lazy_static = "1.5.0"
 sysinfo = "0.37.2"
 indexmap = { version = "2.13.0", features = ["serde"] }
 libloading = "0.9.0"
+flate2 = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+unicode-normalization = "0.1"
+rand = "0.8"
+rustyline-async = "0.4.9"
+rsa = "0.9"
+sha2 = "0.10"
+aes-gcm = "0.10"
+tower-http = { version = "0.7", features = ["fs"] }
 ygopro-derive = {
     git = "https://github.com/IamIpanda/ygopru",
     rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",

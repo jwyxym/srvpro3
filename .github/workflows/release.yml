@@ -83,6 +83,12 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      - name: Download dialogues
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://mercury233.me/ygosrv233/dialogues.json" -OutFile "default/dialogues.json" -TimeoutSec 60 -MaximumRetryCount 3 -RetryIntervalSec 5 -ErrorAction Stop
+          Get-Content -LiteralPath "default/dialogues.json" -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop | Out-Null
+
       - name: Package
         shell: pwsh
         env:
