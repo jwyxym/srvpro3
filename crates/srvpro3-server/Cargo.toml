@@ -14,7 +14,6 @@ flate2.workspace = true
 reqwest.workspace = true
 unicode-normalization.workspace = true
 parking_lot.workspace = true
-sea-orm.workspace = true
 linkme.workspace = true
 tokio.workspace = true
 binrw.workspace = true

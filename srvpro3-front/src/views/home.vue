@@ -2,7 +2,7 @@
 	<div id = 'srvpro3__home'>
 		<aside id = 'srvpro3__home__sidebar' aria-label = '主导航'>
 			<div id = 'srvpro3__home__brand'>SrvPro3 <span>WebUI</span></div>
-			<el-menu :default-active = 'page.active' @select = 'page.select'>
+			<el-menu router :default-active = 'page.active'>
 				<el-menu-item v-for = 'item in page.items' :key = 'item.key' :index = 'item.key'>
 					{{ item.label }}
 				</el-menu-item>
@@ -20,7 +20,7 @@
 			</main>
 		</div>
 		<el-drawer id = 'srvpro3__home__drawer' v-model = 'page.drawer_open' title = 'SrvPro3 WebUI' direction = 'ltr' size = 'min(280px, 85vw)'>
-			<el-menu :default-active = 'page.active' @select = 'page.select'>
+			<el-menu router :default-active = 'page.active'>
 				<el-menu-item v-for = 'item in page.items' :key = 'item.key' :index = 'item.key'>
 					{{ item.label }}
 				</el-menu-item>
@@ -29,17 +29,17 @@
 	</div>
 </template>
 <script setup lang = 'ts'>
-	import { onMounted, onUnmounted, reactive } from 'vue';
-	import { useRoute, useRouter } from 'vue-router';
+	import { onMounted, onUnmounted, reactive, watch } from 'vue';
+	import { useRoute } from 'vue-router';
 	import * as ws from '@/script/ws';
 	const route = useRoute();
-	const router = useRouter();
 	const mobile = window.matchMedia('(max-width: 767px)');
 	const page = reactive({
 		items : [
 			{ key : '/home', label : '主页' },
 			{ key : '/home/room', label : '房间列表' },
 			{ key : '/hoom/history', label : '历史记录' },
+			{ key : '/home/config', label : '服务器配置' },
 		],
 		drawer_open : false,
 		get active() : string {
@@ -48,14 +48,11 @@
 		get title() : string {
 			return page.items.find(item => item.key === page.active)?.label ?? '主页';
 		},
-		select : (key : string) => {
-			void router.push(key);
-			page.drawer_open = false;
-		},
 		change : () => {
 			if (!mobile.matches) page.drawer_open = false;
 		},
 	});
+	watch(() => route.path, () => { page.drawer_open = false; });
 	onMounted(() => {
 		mobile.addEventListener('change', page.change);
 		ws.connect();

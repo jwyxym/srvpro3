@@ -1,5 +1,6 @@
 mod auth;
 mod cards;
+mod config;
 mod history;
 mod host;
 mod query;
@@ -57,6 +58,7 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/host", get(host::get))
 		.route("/cards", get(cards::get))
 		.route("/reload", post(reload::reload))
+		.route("/config", get(config::read).put(config::save))
 		.route("/room", get(room::list))
 		.route("/room", delete(room::interrupt))
 		.route("/history", get(history::list))

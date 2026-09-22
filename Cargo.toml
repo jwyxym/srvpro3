@@ -50,6 +50,7 @@ rustyline-async = "0.4.9"
 rsa = "0.9"
 sha2 = "0.10"
 aes-gcm = "0.10"
+toml_edit = "0.22"
 tower-http = { version = "0.7", features = ["fs"] }
 ygopro-derive = {
     git = "https://github.com/IamIpanda/ygopru",

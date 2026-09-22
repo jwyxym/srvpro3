@@ -53,7 +53,16 @@ async fn authenticate(request: &mut Request) -> Result<(), (StatusCode, &'static
 	if !parts.is_empty() { target.push('?'); target.push_str(&parts.join("&")); }
 	let credentials = crypto::decrypt(query.auth, request.method().to_string(), target).await?;
 	check(&credentials, request.method())?;
+	if matches!(request.uri().path(), "/config" | "/reload") { require_sudo(&credentials)?; }
 	request.extensions_mut().insert(credentials);
+	Ok(())
+}
+
+pub fn require_sudo(credentials: &Credentials) -> Result<(), (StatusCode, &'static str)> {
+	let config = srvpro3_config::get().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "配置尚未加载"))?;
+	if !config.http_api.user.get(&credentials.user).is_some_and(|user| {
+		user.password == credentials.password && matches!(user.permissions, Permissions::Sudo)
+	}) { return Err((StatusCode::FORBIDDEN, "此接口需要 sudo 权限")); }
 	Ok(())
 }
 

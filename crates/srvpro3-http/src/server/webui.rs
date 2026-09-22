@@ -23,6 +23,7 @@ pub fn router() -> Router {
 		.route("/home", get(redirect_home))
 		.route("/home/room", get(redirect_home))
 		.route("/hoom/history", get(redirect_home))
+		.route("/home/config", get(redirect_home))
 		.fallback_service(ServeDir::new("webui"))
 		.layer(middleware::from_fn(check))
 }

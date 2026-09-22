@@ -14,6 +14,7 @@ export const router = createRouter({
 				{ path: '', component: () => import('./views/home/index.vue') },
 				{ path: 'room', component: () => import('./views/home/room.vue') },
 				{ path: '/hoom/history', component: () => import('./views/home/history.vue') },
+				{ path: '/home/config', component: () => import('./views/home/config.vue') },
 			],
 		}
 	],

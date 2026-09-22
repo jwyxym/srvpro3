@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 use anyhow::Error;
-use axum::{Json, http::StatusCode};
+use axum::{Extension, Json, http::StatusCode};
 use parking_lot::RwLock;
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -22,7 +22,8 @@ pub struct ReloadResponse {
 	reloaded: bool,
 }
 
-pub async fn reload() -> Result<Json<ReloadResponse>, (StatusCode, &'static str)> {
+pub async fn reload(Extension(credentials): Extension<super::auth::Credentials>) -> Result<Json<ReloadResponse>, (StatusCode, &'static str)> {
+	super::auth::require_sudo(&credentials)?;
 	let sender = CONTROL.read().clone()
 		.ok_or((StatusCode::SERVICE_UNAVAILABLE, "重载服务尚未启动"))?;
 	let (result, receiver) = oneshot::channel();
