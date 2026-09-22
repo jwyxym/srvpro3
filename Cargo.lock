@@ -4880,9 +4880,8 @@ checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "ygopro"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd660363a18d2aa2485a773fc5e087b9e2a311aa8d64747579363ee3b2f6b062"
+version = "0.1.6"
+source = "git+https://github.com/IamIpanda/ygopru?rev=af706f062ba1a29e522f15e76b69eb792517c8cd#af706f062ba1a29e522f15e76b69eb792517c8cd"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -4914,8 +4913,7 @@ dependencies = [
 [[package]]
 name = "ygopro-core-wrapper"
 version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8208f3c9c6187867ce776e290176271f1e2e0abdd4e27c7a9780c959d8797cfc"
+source = "git+https://github.com/IamIpanda/ygopru?rev=af706f062ba1a29e522f15e76b69eb792517c8cd#af706f062ba1a29e522f15e76b69eb792517c8cd"
 dependencies = [
  "cc",
  "glob",
@@ -4927,9 +4925,8 @@ dependencies = [
 
 [[package]]
 name = "ygopro-data"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9872391775168bfc470e25d1ab033bdabcfe44d1423943e5b276c1bb35aec02e"
+version = "0.1.3"
+source = "git+https://github.com/IamIpanda/ygopru?rev=af706f062ba1a29e522f15e76b69eb792517c8cd#af706f062ba1a29e522f15e76b69eb792517c8cd"
 dependencies = [
  "binrw",
  "bitflags 2.13.2",
@@ -4947,8 +4944,7 @@ dependencies = [
 [[package]]
 name = "ygopro-derive"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fafc5ad4406706d04ded3e863f402e111269ee74b99a0bb0e31fb274c41657c"
+source = "git+https://github.com/IamIpanda/ygopru?rev=af706f062ba1a29e522f15e76b69eb792517c8cd#af706f062ba1a29e522f15e76b69eb792517c8cd"
 dependencies = [
  "darling 0.14.4",
  "proc-macro2",
@@ -4959,8 +4955,7 @@ dependencies = [
 [[package]]
 name = "ygopro-handler"
 version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2d83e73896da4470f24d12b47787a287843831c7a561cec1bd6019463bf1e4f"
+source = "git+https://github.com/IamIpanda/ygopru?rev=af706f062ba1a29e522f15e76b69eb792517c8cd#af706f062ba1a29e522f15e76b69eb792517c8cd"
 dependencies = [
  "anymap3",
  "binrw",

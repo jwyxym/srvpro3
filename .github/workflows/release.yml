@@ -95,7 +95,7 @@ jobs:
           $archive = "srvpro3-$version-$env:ARTIFACT.zip"
           New-Item -ItemType Directory -Force -Path "$bundle/windbot" | Out-Null
           Copy-Item "target/release/$env:BINARY" $bundle
-          Copy-Item -LiteralPath default/config.toml -Destination "$bundle/config.toml"
+          Copy-Item -LiteralPath default -Destination "$bundle/default" -Recurse
           Copy-Item -LiteralPath srvpro3-front/dist -Destination "$bundle/webui" -Recurse
           Invoke-WebRequest -Uri "https://github.com/jwyxym/windbot/releases/download/release-latest/$env:WINDBOT" -OutFile windbot.zip
           Expand-Archive -Path windbot.zip -DestinationPath "$bundle/windbot"

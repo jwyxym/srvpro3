@@ -42,11 +42,31 @@ lazy_static = "1.5.0"
 sysinfo = "0.37.2"
 indexmap = { version = "2.13.0", features = ["serde"] }
 libloading = "0.9.0"
-ygopro-derive = "0.1.1"
-ygopro = { version = "0.1.5", default-features = false, features = ["koishi", "forge"] }
-ygopro-data = { version = "0.1.1", default-features = false }
-ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
-ygopro-handler = "0.1.2"
+ygopro-derive = {
+    git = "https://github.com/IamIpanda/ygopru",
+    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+}
+ygopro = {
+    git = "https://github.com/IamIpanda/ygopru",
+    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    default-features = false,
+    features = ["koishi", "forge"]
+}
+ygopro-data = {
+    git = "https://github.com/IamIpanda/ygopru",
+    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    default-features = false
+}
+ygopro-core-wrapper = {
+    git = "https://github.com/IamIpanda/ygopru",
+    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+    default-features = false,
+    features = ["koishi"]
+}
+ygopro-handler = {
+    git = "https://github.com/IamIpanda/ygopru",
+    rev = "af706f062ba1a29e522f15e76b69eb792517c8cd",
+}
 ygopro_cdb_reader = "0.1.5"
 
 srvpro3-cards = { path = "./crates/srvpro3-cards" }
@@ -72,3 +92,10 @@ members = [
 	"crates/srvpro3-server",
 	"crates/srvpro3-windbot"
 ]
+
+[backup]
+ygopro-derive = "0.1.1"
+ygopro = { version = "0.1.5", default-features = false, features = ["koishi", "forge"] }
+ygopro-data = { version = "0.1.1", default-features = false }
+ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
+ygopro-handler = "0.1.2"
