@@ -13,9 +13,12 @@
 					<div class = 'detail'>
 						<p>卡组 A（Base64）</p><el-input :model-value = 'row.deck_a' type = 'textarea' readonly autosize/>
 						<p>卡组 B（Base64）</p><el-input :model-value = 'row.deck_b' type = 'textarea' readonly autosize/>
+						<template v-if = 'row.deck_c !== null'><p>卡组 C（A 的队友，Base64）</p><el-input :model-value = 'row.deck_c' type = 'textarea' readonly autosize/></template>
+						<template v-if = 'row.deck_d !== null'><p>卡组 D（B 的队友，Base64）</p><el-input :model-value = 'row.deck_d' type = 'textarea' readonly autosize/></template>
 					</div>
 				</template></el-table-column>
 				<el-table-column prop = 'id' label = 'ID' width = '90'/>
+				<el-table-column label = '模式' width = '80'><template #default = '{ row }'>{{ row.player_c !== null ? '2v2' : '1v1' }}</template></el-table-column>
 				<el-table-column prop = 'room_id' label = '房间号' min-width = '130'>
 					<template #default = '{ row }'>
 						<el-button link type = 'primary' :aria-label = '`复制房间号 ${row.room_id}`' title = '点击复制房间号' @click = 'page.copy_room_id(row.room_id)'>{{ row.room_id }}</el-button>
@@ -26,14 +29,16 @@
 						<el-button v-if = 'row.replay' link type = 'primary' :loading = 'page.downloading === row.id' :disabled = 'page.downloading !== null && page.downloading !== row.id' :aria-label = '`下载回放 R#${row.id}`' title = '点击下载回放' @click = 'page.download_replay(row.id)'>R#{{ row.id }}</el-button>
 					</template>
 				</el-table-column>
-				<el-table-column prop = 'player_a' label = '玩家 A' min-width = '160'>
+				<el-table-column prop = 'player_a' label = '对战方 A' min-width = '170'>
 					<template #default = '{ row }'>
 						<el-text type = 'primary' class = 'player_name' role = 'button' tabindex = '0' @click = 'page.open_deck(row.deck_a, row.player_a)' @keydown.enter.prevent = 'page.open_deck(row.deck_a, row.player_a)' @keydown.space.prevent = 'page.open_deck(row.deck_a, row.player_a)'>{{ row.player_a }}</el-text>
+						<template v-if = 'row.player_c !== null'> / <el-text type = 'primary' class = 'player_name' role = 'button' tabindex = '0' @click = 'page.open_deck(row.deck_c, row.player_c)' @keydown.enter.prevent = 'page.open_deck(row.deck_c, row.player_c)' @keydown.space.prevent = 'page.open_deck(row.deck_c, row.player_c)'>{{ row.player_c }}</el-text></template>
 					</template>
 				</el-table-column>
-				<el-table-column prop = 'player_b' label = '玩家 B' min-width = '160'>
+				<el-table-column prop = 'player_b' label = '对战方 B' min-width = '170'>
 					<template #default = '{ row }'>
 						<el-text type = 'primary' class = 'player_name' role = 'button' tabindex = '0' @click = 'page.open_deck(row.deck_b, row.player_b)' @keydown.enter.prevent = 'page.open_deck(row.deck_b, row.player_b)' @keydown.space.prevent = 'page.open_deck(row.deck_b, row.player_b)'>{{ row.player_b }}</el-text>
+						<template v-if = 'row.player_d !== null'> / <el-text type = 'primary' class = 'player_name' role = 'button' tabindex = '0' @click = 'page.open_deck(row.deck_d, row.player_d)' @keydown.enter.prevent = 'page.open_deck(row.deck_d, row.player_d)' @keydown.space.prevent = 'page.open_deck(row.deck_d, row.player_d)'>{{ row.player_d }}</el-text></template>
 					</template>
 				</el-table-column>
 				<el-table-column label = '胜利者' min-width = '160'><template #default = '{ row }'>{{ row.winner_id ?? '无胜者' }}</template></el-table-column>
@@ -49,11 +54,13 @@
 	import { ElMessage, ElMessageBox, ElLoading } from 'element-plus';
 	import YGOProDeck from 'ygopro-deck-encode';
 	import admin from '@/script/admin';
+	import cache from '@/script/cache';
 	import { state } from '@/script/ws';
 	import emitter, { type Events } from '@/script/emit';
 	interface RecordInfo {
 		id : number; room_id : string; player_a : string; player_b : string;
 		deck_a : string; deck_b : string; winner_id : string | null; replay : boolean; created_at : number;
+		player_c : string | null; player_d : string | null; deck_c : string | null; deck_d : string | null;
 	}
 	const controller = new AbortController();
 	let pending = false;
@@ -72,11 +79,34 @@
 			if (page.downloading !== null || controller.signal.aborted) return;
 			page.downloading = id;
 			try {
-				const path = '/history/replay';
-				const query = new URLSearchParams({ id : String(id) });
-				const response = await fetch(path + await admin.to_query(path, 'GET', query, controller.signal), { signal : controller.signal });
-				if (!response.ok) throw new Error(await response.text() || `下载失败：${response.status}`);
-				const blob = await response.blob();
+				const key = `replay::R#${id}`;
+				let blob = cache.get(key) as Blob | undefined;
+				if (!blob) {
+					if (typeof DecompressionStream === 'undefined') throw new Error('当前浏览器不支持录像解压，请升级浏览器');
+					const path = '/history/replay';
+					const query = new URLSearchParams({ id : String(id) });
+					const response = await fetch(path + await admin.to_query(path, 'GET', query, controller.signal), { signal : controller.signal });
+					if (!response.ok) throw new Error(await response.text() || `下载失败：${response.status}`);
+					const compressed = await response.blob();
+					if (controller.signal.aborted) return;
+					let size = 0;
+					try {
+						const stream = compressed.stream()
+							.pipeThrough(new DecompressionStream('gzip'), { signal : controller.signal })
+							.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+								transform(chunk, output) {
+									size += chunk.byteLength;
+									if (size > 64 * 1024 * 1024) throw new Error('录像解压后超过 64 MiB');
+									output.enqueue(chunk);
+								}
+							}));
+						blob = await new Response(stream).blob();
+					} catch {
+						throw new Error('录像解压失败：数据损坏或解压后超过 64 MiB');
+					}
+					if (controller.signal.aborted) return;
+					cache.set(key, blob);
+				}
 				if (controller.signal.aborted) return;
 				const url = URL.createObjectURL(blob);
 				const link = document.createElement('a');

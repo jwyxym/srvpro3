@@ -3,6 +3,7 @@ use ygopro::{
 	duel::{Duel, PlayerIndex},
 	message::{DuelStart, DuelEnd, GenerateReplay},
 	single_duel::{SingleDuel, ygopro_handlers::{HandlerEx, SINGLE_DUEL_YGOPRO_HANDLERS_EX}},
+	tag_duel::{TagDuel, TeamIndex, ygopro_handlers::{HandlerEx as TagHandlerEx, TAG_DUEL_YGOPRO_HANDLERS_EX}},
 	ygopro_handlers::{Handler, HandlerEx as GeneralHandlerEx, Request, YGOPRO_HANDLERS, YGOPRO_HANDLERS_EX},
 };
 use ygopro_data::{constants::{CorePlayer, Netplayer}, message::ctos};
@@ -22,6 +23,10 @@ fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 		player_b: b.name.to_string(),
 		deck_a: a.deck.to_string(),
 		deck_b: b.deck.to_string(),
+		player_c: None,
+		player_d: None,
+		deck_c: None,
+		deck_d: None,
 		winner_id: None,
 		room_id: record.room_id.clone(),
 		first_attack_slot: duel.first_attack_player.unwrap_or(PlayerIndex(0)).0,
@@ -31,6 +36,35 @@ fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 #[before(DuelEnd)]
 #[register_to(SINGLE_DUEL_YGOPRO_HANDLERS_EX as HandlerEx)]
 fn on_duel_end(message: &DuelEnd, config: RecordConfig) {
+	set_winner(message, config);
+}
+
+#[before(DuelStart)]
+#[register_to(TAG_DUEL_YGOPRO_HANDLERS_EX as TagHandlerEx)]
+fn on_tag_start(duel: &mut TagDuel, config: RecordConfig) {
+	let (Some(a), Some(a_tag), Some(b), Some(b_tag)) = (
+		duel.get(PlayerIndex(0)), duel.get(PlayerIndex(1)),
+		duel.get(PlayerIndex(2)), duel.get(PlayerIndex(3)),
+	) else { return };
+	let mut record = config.0.lock().unwrap();
+	record.current_history = Some(HistoryRecord {
+		player_a: a.name.to_string(), player_b: b.name.to_string(),
+		deck_a: a.deck.to_string(), deck_b: b.deck.to_string(),
+		player_c: Some(a_tag.name.to_string()), player_d: Some(b_tag.name.to_string()),
+		deck_c: Some(a_tag.deck.to_string()), deck_d: Some(b_tag.deck.to_string()),
+		winner_id: None, room_id: record.room_id.clone(),
+		// 历史结果按 A/B 队存储，与单打的 0/1 结果兼容。
+		first_attack_slot: duel.first_attack_team.unwrap_or(TeamIndex::Team1).leader().0 / 2,
+	});
+}
+
+#[before(DuelEnd)]
+#[register_to(TAG_DUEL_YGOPRO_HANDLERS_EX as TagHandlerEx)]
+fn on_tag_end(message: &DuelEnd, config: RecordConfig) {
+	set_winner(message, config);
+}
+
+fn set_winner(message: &DuelEnd, config: RecordConfig) {
 	let mut record = config.0.lock().unwrap();
 	if let Some(history) = record.current_history.as_mut() {
 		history.winner_id = match message.winner {
@@ -55,12 +89,17 @@ fn on_generate_replay(duel: &mut Duel, config: RecordConfig) {
 	if matches!(settings.db.db, srvpro3_config::DB::None) { return; }
 	let replay = settings.server.replay;
 	drop(settings);
-	let buffer = if replay { super::history::replay_buffer(duel).map(Some) } else { Ok(None) };
+	let buffer = if replay {
+		match super::history::replay_buffer(duel) {
+			Ok(buffer) => Some(buffer),
+			Err(error) => {
+				srvpro3_log::error!("生成录像失败，仍保存对局结果：{error:#}");
+				None
+			}
+		}
+	} else { None };
 	tokio::spawn(async move {
-		let result = async {
-			let buffer = buffer?;
-			super::history::persist(history, buffer).await
-		}.await;
+		let result = super::history::persist(history, buffer).await;
 		if let Err(error) = result { srvpro3_log::error!("保存小局历史记录失败：{error:#}"); }
 	});
 }

@@ -41,7 +41,9 @@ pub async fn by_name(
 		.filter(
 			Condition::any()
 				.add(Column::PlayerA.eq(name.to_owned()))
-				.add(Column::PlayerB.eq(name.to_owned())),
+				.add(Column::PlayerB.eq(name.to_owned()))
+				.add(Column::PlayerC.eq(name.to_owned()))
+				.add(Column::PlayerD.eq(name.to_owned())),
 		)
 		.order_by_desc(Column::CreatedAt)
 		.paginate(&db, page_size);

@@ -91,6 +91,11 @@ export const connect = () : void => {
 		if (!message || typeof message.type !== 'string' || !message.msg || typeof message.msg !== 'object') return;
 		// 持续维护房间快照，切换页面无需重连来获取 room_all。
 		if (message.type === 'cards_upload') cache.set('/cards', message.msg);
+		if (['history_update', 'history_delete', 'history_reset'].includes(message.type)) {
+			for (const key of cache.keys()) {
+				if (typeof key === 'string' && key.startsWith('replay::')) cache.delete(key);
+			}
+		}
 		if (message.type === 'room_all') {
 			if (!Array.isArray(message.msg)) return;
 			state.rooms = message.msg;

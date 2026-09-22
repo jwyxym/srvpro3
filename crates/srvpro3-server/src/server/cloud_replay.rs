@@ -33,9 +33,7 @@ fn decode_record(record: srvpro3_database::history::Model) -> Result<Replay> {
 }
 
 fn unpack(encoded: &str) -> Result<Vec<u8>> {
-	ensure!(encoded.len() <= MAX_REPLAY, "录像文件过大");
-	let encoded = encoded.strip_prefix(super::history::REPLAY_PREFIX).context("不支持旧版观战帧，请下载新保存的 .yrp3d 录像")?;
-	let compressed = STANDARD.decode(encoded).context("录像 Base64 格式无效")?;
+	let compressed = compressed_replay(encoded)?;
 	let mut buffer = Vec::new();
 	GzDecoder::new(compressed.as_slice()).take(MAX_REPLAY as u64 + 1)
 		.read_to_end(&mut buffer).context("解压录像失败")?;
@@ -43,11 +41,17 @@ fn unpack(encoded: &str) -> Result<Vec<u8>> {
 	Ok(buffer)
 }
 
-/// 返回数据库中的原始 .yrp3d 文件；调用方应在阻塞线程中执行。
+fn compressed_replay(encoded: &str) -> Result<Vec<u8>> {
+	ensure!(encoded.len() <= MAX_REPLAY, "录像文件过大");
+	let encoded = encoded.strip_prefix(super::history::REPLAY_PREFIX).context("不支持旧版观战帧，请下载新保存的 .yrp3d 录像")?;
+	let compressed = STANDARD.decode(encoded).context("录像 Base64 格式无效")?;
+	ensure!(compressed.starts_with(&[0x1f, 0x8b, 0x08]), "录像 gzip 格式无效");
+	Ok(compressed)
+}
+
+/// 返回 gzip 压缩的 .yrp3d，由下载端解压；调用方应在阻塞线程中执行。
 pub fn export(record: srvpro3_database::history::Model) -> Result<Vec<u8>> {
-	let buffer = unpack(record.replay.as_deref().context("该历史记录没有录像")?)?;
-	parse_forge(&buffer)?;
-	Ok(buffer)
+	compressed_replay(record.replay.as_deref().context("该历史记录没有录像")?)
 }
 
 fn parse_forge(buffer: &[u8]) -> Result<ygopro_data::data::forge::Replay> {

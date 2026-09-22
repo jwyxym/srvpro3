@@ -35,8 +35,9 @@ pub async fn download(Query(query): Query<DownloadQuery>) -> Result<Response, (S
 			(StatusCode::UNPROCESSABLE_ENTITY, "录像数据损坏或格式不支持，无法导出")
 		})?;
 	Ok(([
-		(header::CONTENT_TYPE, "application/octet-stream".to_owned()),
-		(header::CONTENT_DISPOSITION, format!("attachment; filename=\"replay-{}.yrp3d\"", query.id)),
+		// gzip 是文件内容，不设置 Content-Encoding，避免浏览器自动解压。
+		(header::CONTENT_TYPE, "application/gzip".to_owned()),
+		(header::CONTENT_DISPOSITION, format!("attachment; filename=\"replay-{}.yrp3d.gz\"", query.id)),
 	], bytes).into_response())
 }
 
@@ -54,6 +55,10 @@ pub struct RecordResponse {
 	player_b: String,
 	deck_a: String,
 	deck_b: String,
+	player_c: Option<String>,
+	player_d: Option<String>,
+	deck_c: Option<String>,
+	deck_d: Option<String>,
 	winner_id: Option<String>,
 	room_id: String,
 	replay: bool,
@@ -68,6 +73,10 @@ impl From<Model> for RecordResponse {
 			player_b: record.player_b,
 			deck_a: record.deck_a,
 			deck_b: record.deck_b,
+			player_c: record.player_c,
+			player_d: record.player_d,
+			deck_c: record.deck_c,
+			deck_d: record.deck_d,
 			winner_id: record.winner_id,
 			room_id: record.room_id,
 			replay: record.replay.is_some_and(|value| !value.is_empty()),
@@ -82,6 +91,10 @@ pub struct CreateRequest {
 	pub player_b: String,
 	pub deck_a: String,
 	pub deck_b: String,
+	pub player_c: Option<String>,
+	pub player_d: Option<String>,
+	pub deck_c: Option<String>,
+	pub deck_d: Option<String>,
 	pub winner_id: Option<String>,
 	pub room_id: String,
 	pub replay: Option<String>,
@@ -136,6 +149,7 @@ pub async fn create(
 	let record: Model = srvpro3_database::history::create(
 		&db, request.player_a, request.player_b, request.deck_a, request.deck_b,
 		request.winner_id, request.room_id, request.replay,
+		request.player_c, request.player_d, request.deck_c, request.deck_d,
 	).await.map_err(|_| (StatusCode::BAD_REQUEST, "新增历史记录失败"))?;
 	Ok(Json(record.into()))
 }

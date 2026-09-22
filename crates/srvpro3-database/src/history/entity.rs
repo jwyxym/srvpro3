@@ -8,8 +8,14 @@ pub struct Model {
 	pub id: i64, // 对局id
 	pub player_a: String,       // 玩家A
 	pub player_b: String,       // 玩家B
+	pub player_c: Option<String>, // 双打 A 队队友（座位 1）
+	pub player_d: Option<String>, // 双打 B 队队友（座位 3）
 	pub deck_a: String,         // 玩家A卡组
 	pub deck_b: String,         // 玩家B卡组
+	#[sea_orm(column_type = "Text", nullable)]
+	pub deck_c: Option<String>,
+	#[sea_orm(column_type = "Text", nullable)]
+	pub deck_d: Option<String>,
 	pub winner_id: Option<String>, // 胜利者名称；无胜者时为空
 	pub room_id: String,        // 房间
 	#[sea_orm(column_type = "Text")]

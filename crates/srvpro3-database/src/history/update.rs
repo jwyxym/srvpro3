@@ -20,6 +20,11 @@ pub async fn update(
 	record.replay = Set(Some(replay));
 
 	let updated: Model = record.update(db).await?;
+	// 双打队友也可以按名称查询历史，需要一并失效。
+	for name in [&updated.player_c, &updated.player_d].into_iter().flatten() {
+		let key = format!("history:name:{name}*");
+		clear!(&key);
+	}
 	let key: String = format!("history:name:{}*", updated.player_a);
 	clear!(&key);
 	let key: String = format!("history:name:{}*", updated.player_b);
