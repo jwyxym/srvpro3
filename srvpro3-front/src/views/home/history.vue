@@ -18,7 +18,6 @@
 					</div>
 				</template></el-table-column>
 				<el-table-column prop = 'id' label = 'ID' width = '90'/>
-				<el-table-column label = '模式' width = '80'><template #default = '{ row }'>{{ row.player_c !== null ? '2v2' : '1v1' }}</template></el-table-column>
 				<el-table-column prop = 'room_id' label = '房间号' min-width = '130'>
 					<template #default = '{ row }'>
 						<el-button link type = 'primary' :aria-label = '`复制房间号 ${row.room_id}`' title = '点击复制房间号' @click = 'page.copy_room_id(row.room_id)'>{{ row.room_id }}</el-button>

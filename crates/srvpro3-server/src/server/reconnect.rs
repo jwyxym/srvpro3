@@ -97,6 +97,7 @@ pub async fn run(
 	let mut udp_leave_sent = false;
 	let mut pending_observer: VecDeque<Vec<u8>> = VecDeque::new();
 	let mut welcomed = false;
+	let mut joined = false;
 	loop {
 		let observer = record.lock().unwrap().players.get(&id)
 			.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
@@ -165,6 +166,13 @@ pub async fn run(
 						leave_position = record.players.get(&id).map(|player| player.position);
 					}
 					if matches!(value, stoc::Message::TypeChange(_)) { record.update_info(&rooms, &room_id); }
+					// 等引擎确认加入并分配身份后通知；后续换位不重复发送。
+					if !joined && welcomed && record.players.get(&id).is_some_and(|player| {
+						matches!(player.position, Netplayer::Player(_) | Netplayer::Observer(_))
+					}) {
+						joined = true;
+						super::messages::membership(&record, id, true);
+					}
 				}
 				if let Some(socket) = live.as_ref().filter(|socket| socket.verified) {
 					let observer = record.lock().unwrap().players.get(&id)
@@ -274,6 +282,10 @@ pub async fn run(
 		}
 	}
 	available.store(false, Ordering::Release);
+	// 保留座位期间不会走到这里；房间整体结束时不逐个刷离房提示。
+	if joined && !*finished.borrow() && rooms.read().contains_key(&room_id) {
+		super::messages::membership(&record.lock().unwrap(), id, false);
+	}
 	// 先结束引擎输入并更新房间列表，不让 UDP 传输清理延迟玩家离房。
 	// DuelHost 在输入流结束时发送 LeaveGame，移除座位并销毁空房间。
 	drop(engine_input);

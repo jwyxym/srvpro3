@@ -359,8 +359,9 @@ impl Server {
 				return Ok(());
 			}
 		};
+		let random_key = (admission.is_none() && !is_bot && options.room_key.is_none()).then(|| options.random_key());
 		let room_id: String = admission.as_ref().map(tournament::Admission::room_id).or_else(|| bot_room.map(|(room_id, _)| room_id)).or_else(|| options.room_key.clone()).unwrap_or_else(|| {
-			self.random_room(&options.random_prefix(), options.capacity())
+			self.random_room(&options.random_key(), options.capacity())
 		});
 		let mut watching_tournament = false;
 		if let Some(room) = self.rooms.get(&room_id) {
@@ -418,6 +419,7 @@ impl Server {
 			});
 			RoomEntry {
 				host,
+				random_key,
 				connections: 0,
 				bot_only_since: None,
 				record,
@@ -497,16 +499,17 @@ impl Server {
 		Ok(())
 	}
 
-	fn random_room(&mut self, prefix: &str, capacity: usize) -> String {
-		if let Some((room_id, _)) = self.rooms.iter().find(|(room_id, room)| {
-			room_id.starts_with(prefix) && room.connections < capacity
+	fn random_room(&mut self, key: &str, capacity: usize) -> String {
+		if let Some((room_id, _)) = self.rooms.iter().find(|(_, room)| {
+			room.random_key.as_deref() == Some(key) && room.connections < capacity
 		}) {
 			return room_id.clone();
 		}
 
 		loop {
-			let room_id: String = format!("{prefix}{}", self.next_room_id);
-			self.next_room_id = self.next_room_id.wrapping_add(1);
+			// 7 字符前缀 + 最多 12 位编号，给 20 单元的密码字段保留终止符。
+			let room_id: String = format!("RANDOM#{}", self.next_room_id);
+			self.next_room_id = (self.next_room_id + 1) % 1_000_000_000_000;
 			if !self.rooms.contains_key(&room_id) {
 				return room_id;
 			}

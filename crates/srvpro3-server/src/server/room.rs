@@ -6,6 +6,8 @@ use crate::rooms::{RoomList, RoomPlayer, ChatInfo};
 
 pub struct RoomEntry {
 	pub host: DuelHost,
+	/// 随机匹配规则仅在服务端保存，不占用客户端房间密码长度。
+	pub random_key: Option<String>,
 	pub connections: usize,
 	pub bot_only_since: Option<tokio::time::Instant>,
 	pub record: Arc<Mutex<RoomRecord>>,

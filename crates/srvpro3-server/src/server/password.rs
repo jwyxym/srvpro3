@@ -155,9 +155,9 @@ impl Password {
 		if self.host_info.mode == Mode::Tag { 4 } else { 2 }
 	}
 
-	pub fn random_prefix(&self) -> String {
+	pub fn random_key(&self) -> String {
 		format!(
-			"R#{}-{}-{}-{}-{}-{}-{}-{}-{}-{}#",
+			"{}-{}-{}-{}-{}-{}-{}-{}-{}-{}",
 			self.host_info.mode as u8,
 			self.best_of,
 			self.host_info.lflist,
