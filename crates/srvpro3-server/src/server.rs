@@ -388,7 +388,7 @@ impl Server {
 		let watch = srvpro3_config::get()?.server.watch;
 
 		let room_id_for_finish: String = room_id.clone();
-		let record_room_id: String = if admission.is_some() { room_id.clone() } else { connection.handshake.pass.clone() };
+		let record_room_id: String = room_id.clone();
 		let room: &mut RoomEntry = self.rooms.entry(room_id.clone()).or_insert_with(|| {
 			let record: Arc<Mutex<RoomRecord>> = Arc::new(Mutex::new(RoomRecord::new(record_room_id)));
 			record.lock().unwrap().team_size = (options.capacity() / 2) as u8;
