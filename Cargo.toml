@@ -57,7 +57,7 @@ ygopro = { version = "0.1.7", default-features = false, features = ["koishi", "f
 ygopro-data = { version = "0.1.3", default-features = false }
 ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
 ygopro-handler = "0.1.3"
-ygopro_cdb_reader = "0.1.5"
+ygopro_cdb_reader = "0.1.6"
 
 srvpro3-cards = { path = "./crates/srvpro3-cards" }
 srvpro3-config = { path = "./crates/srvpro3-config" }
