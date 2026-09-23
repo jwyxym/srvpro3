@@ -52,31 +52,11 @@ sha2 = "0.10"
 aes-gcm = "0.10"
 toml_edit = "0.22"
 tower-http = { version = "0.7", features = ["fs"] }
-ygopro-derive = {
-    git = "https://github.com/IamIpanda/ygopru",
-    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
-}
-ygopro = {
-    git = "https://github.com/IamIpanda/ygopru",
-    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
-    default-features = false,
-    features = ["koishi", "forge"]
-}
-ygopro-data = {
-    git = "https://github.com/IamIpanda/ygopru",
-    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
-    default-features = false
-}
-ygopro-core-wrapper = {
-    git = "https://github.com/IamIpanda/ygopru",
-    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
-    default-features = false,
-    features = ["koishi"]
-}
-ygopro-handler = {
-    git = "https://github.com/IamIpanda/ygopru",
-    rev = "a3ef4a60de3eccdf4ef7cd5bb7e333d782adb9ea",
-}
+ygopro-derive = "0.1.1"
+ygopro = { version = "0.1.7", default-features = false, features = ["koishi", "forge"] }
+ygopro-data = { version = "0.1.3", default-features = false }
+ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
+ygopro-handler = "0.1.3"
 ygopro_cdb_reader = "0.1.5"
 
 srvpro3-cards = { path = "./crates/srvpro3-cards" }
@@ -108,10 +88,3 @@ opt-level = 3
 
 [profile.dev.package.rsa]
 opt-level = 3
-
-[backup]
-ygopro-derive = "0.1.1"
-ygopro = { version = "0.1.5", default-features = false, features = ["koishi", "forge"] }
-ygopro-data = { version = "0.1.1", default-features = false }
-ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
-ygopro-handler = "0.1.2"

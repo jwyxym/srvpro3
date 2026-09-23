@@ -160,8 +160,7 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 		}
 		Ok(())
 	}.await;
-	// 心跳超时时先通知房间连接已关闭，再清理底层传输。
-	if protocol == Protocol::Udp { drop(incoming_tx); }
+	drop(incoming_tx);
 	let _ = timeout(TIMEOUT, output.close()).await;
 	result
 }

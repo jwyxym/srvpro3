@@ -1,5 +1,5 @@
 use std::{collections::{BTreeMap, BTreeSet, VecDeque}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
-use ygopro::host::DuelHost;
+use super::host::DuelHost;
 use ygopro_data::{data::Deck, constants::{CorePlayer, Netplayer, DuelStage}, message::{ctos, stoc, gm}};
 use super::{history, player::PlayerRecord, DuelRecord};
 use crate::rooms::{RoomList, RoomPlayer, ChatInfo};

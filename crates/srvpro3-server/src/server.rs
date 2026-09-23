@@ -7,6 +7,7 @@ mod room;
 mod player;
 mod transport;
 mod reconnect;
+mod host;
 mod resilience;
 mod spectate;
 mod seating;
@@ -30,14 +31,12 @@ use tokio::{
 	task::JoinSet,
 	spawn
 };
-use ygopro::host::DuelHost;
+use host::DuelHost;
 use ygopro_data::{
 	data::ReplayMode,
 	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer, DuelStage},
-	message::{ctos, stoc, gm},
-	complex::Complex
+	message::{ctos, stoc, gm}
 };
-use ygopro_handler::RoomProvider;
 
 use srvpro3_log::*;
 
@@ -408,9 +407,8 @@ impl Server {
 				file_template: "%Y-%m-%d %H-%M-%S {players}".into(),
 				format: ygopro::plugin::replay::Format::YgoproForge,
 			});
-			let mut host = DuelHost::new(options.host_info, configuration);
-			let finish_signal =
-				<DuelHost as RoomProvider<ctos::Message, Complex<stoc::Message>>>::get_finish_signal(&mut host);
+			let host = DuelHost::new(options.host_info, configuration);
+			let finish_signal = host.get_finish_signal();
 			let finished_tx: mpsc::UnboundedSender<String> = self.finished_tx.clone();
 			let room_id_for_finish = room_id_for_finish.clone();
 			tokio::spawn(async move {
@@ -466,8 +464,17 @@ impl Server {
 		record.lock().unwrap().update_info(&self.room_list, &room_id);
 
 		let (engine_input, engine_receiver) = mpsc::channel(64);
-		for message in &connection.initial {
+		// 握手收齐后按上游要求先设置名字、再入房；其他初始消息交给桥接层暂存。
+		if let Some(message) = connection.initial.iter().rev().find(|message| matches!(message, ctos::Message::PlayerInfo(_))) {
 			engine_input.try_send(message.clone())?;
+		}
+		if let Some(message) = connection.initial.iter().rev().find(|message| matches!(message, ctos::Message::JoinGame(_))) {
+			engine_input.try_send(message.clone())?;
+		}
+		for message in &connection.initial {
+			if !matches!(message, ctos::Message::PlayerInfo(_) | ctos::Message::JoinGame(_)) {
+				engine_input.try_send(message.clone())?;
+			}
 		}
 		let input = stream::unfold(engine_receiver, |mut receiver| async move {
 			receiver.recv().await.map(|message| (message, receiver))
