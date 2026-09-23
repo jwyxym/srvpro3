@@ -30,6 +30,7 @@ fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 		winner_id: None,
 		room_id: record.room_id.clone(),
 		first_attack_slot: duel.first_attack_player.unwrap_or(PlayerIndex(0)).0,
+		replay_start: duel.sender.masked_messages.len(),
 	});
 }
 
@@ -55,6 +56,7 @@ fn on_tag_start(duel: &mut TagDuel, config: RecordConfig) {
 		winner_id: None, room_id: record.room_id.clone(),
 		// 历史结果按 A/B 队存储，与单打的 0/1 结果兼容。
 		first_attack_slot: duel.first_attack_team.unwrap_or(TeamIndex::Team1).leader().0 / 2,
+		replay_start: duel.sender.masked_messages.len(),
 	});
 }
 
@@ -90,7 +92,7 @@ fn on_generate_replay(duel: &mut Duel, config: RecordConfig) {
 	let replay = settings.server.replay;
 	drop(settings);
 	let buffer = if replay {
-		match super::history::replay_buffer(duel) {
+		match super::history::replay_buffer(duel, &history) {
 			Ok(buffer) => Some(buffer),
 			Err(error) => {
 				srvpro3_log::error!("生成录像失败，仍保存对局结果：{error:#}");
