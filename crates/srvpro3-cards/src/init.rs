@@ -9,13 +9,14 @@ use std::{collections::{BTreeMap, HashMap}, sync::Arc};
 use tokio::sync::{OnceCell, broadcast};
 use indexmap::IndexMap;
 use ygopro_cdb_reader::Card;
+use ygopro_lflist_reader::LFList;
 
 use srvpro3_config::Config;
 use srvpro3_log::*;
 
 pub struct CardsSnapshot {
 	pub cards: HashMap<u32, Card>,
-	pub lflists: IndexMap<String, lflist::LFList>,
+	pub lflists: IndexMap<String, LFList>,
 	pub packs: Vec<ypk::YPK>,
 }
 
