@@ -52,7 +52,7 @@ toml_edit = "0.22"
 tower-http = { version = "0.7", features = ["fs"] }
 ygopro = { version = "0.1.7", default-features = false, features = ["koishi", "forge"] }
 ygopro-data = { version = "0.1.3", default-features = false }
-ygopro-core-wrapper = { version = "0.1.3", default-features = false, features = ["koishi"] }
+ygopro-core-wrapper = { version = "0.1.5+3209cd866a", default-features = false, features = ["koishi"] }
 ygopro-handler = "0.1.3"
 ygopro-derive = "0.1.1"
 ygopro_cdb_reader = "0.1.6"
