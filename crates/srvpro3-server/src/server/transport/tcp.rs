@@ -6,7 +6,11 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 	loop {
 		tokio::select! {
 			client = clients.join_next(), if !clients.is_empty() => {
-				let _ = client;
+				match client {
+					Some(Ok(Err(error))) => warn!("TCP 连接异常：{error:#}"),
+					Some(Err(error)) => error!("TCP 连接任务异常：{error}"),
+					_ => {}
+				}
 			}
 			accepted = listener.accept() => {
 				let (socket, address) = accepted?;
@@ -22,6 +26,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 						.sink_map_err(anyhow::Error::from)
 						.with(|bytes: Vec<u8>| futures::future::ready(Ok(bytes.into())));
 					session(Box::pin(input), Box::pin(output), ready, None, address.ip(), Protocol::Tcp).await
+						.with_context(|| format!("客户端 {address}"))
 				});
 			}
 		}

@@ -153,7 +153,18 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 				}
 				frame = outgoing_rx.recv() => {
 					let Some(frame) = frame else { break; };
+					let opening = match frame.first() {
+						Some(0x15) => Some("DuelStart"),
+						Some(0x09) => Some("DeckCount"),
+						Some(0x03) => Some("SelectHand"),
+						Some(0x04) => Some("SelectTp"),
+						_ => None,
+					};
 					timeout(TIMEOUT, output.send(frame)).await??;
+					// 写入传输层成功不代表客户端已经处理，用于与房间输出日志对照。
+					if let Some(message) = opening {
+						info!("{protocol:?} 客户端 {peer_ip} 已写入传输层：{message}");
+					}
 				}
 				_ = incoming_tx.closed(), if accepting_input => accepting_input = false,
 			}

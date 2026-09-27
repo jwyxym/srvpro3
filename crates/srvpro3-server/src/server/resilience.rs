@@ -33,7 +33,12 @@ fn created(duel: &mut Duel, config: RecordConfig) { sync(duel, &config); }
 
 #[after(ctos::HsStart)]
 #[register_to(YGOPRO_HANDLERS)]
-fn started(duel: &mut Duel, config: RecordConfig) { sync(duel, &config); }
+fn started(duel: &mut Duel, config: RecordConfig) {
+	sync(duel, &config);
+	let room_id = config.0.lock().unwrap().room_id.clone();
+	let ready: Vec<_> = duel.players.iter().map(|player| player.as_ref().map(|player| player.ready)).collect();
+	srvpro3_log::info!("房间 {room_id} 开局请求处理完成：stage={:?}，host={:?}，ready={ready:?}", duel.stage, duel.host_player);
+}
 
 #[after(ctos::HandResult)]
 #[register_to(YGOPRO_HANDLERS)]

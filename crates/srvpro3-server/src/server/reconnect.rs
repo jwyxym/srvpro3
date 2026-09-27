@@ -153,6 +153,10 @@ pub async fn run(
 						_ => {}
 					}
 					let mut record = record.lock().unwrap();
+					if matches!(value, stoc::Message::DuelStart(_) | stoc::Message::SelectHand(_) | stoc::Message::SelectTp(_)) {
+						let position = record.players.get(&id).map(|player| player.position);
+						srvpro3_log::info!("房间 {room_id} 连接 {id} 引擎输出：{:?}，position={position:?}，stage={:?}", stoc::MessageType::from(value), record.stage);
+					}
 					let slot = record.players.get(&id).and_then(|player| match player.position { Netplayer::Player(slot) => Some(slot), _ => None });
 					let restoring = slot.is_some_and(|slot| record.refreshing.contains(&slot));
 					// RequestField 的 Start 是场面快照，不是新的一局。
@@ -184,7 +188,8 @@ pub async fn run(
 						continue;
 					}
 					// 慢连接也不能阻塞房间结束或保留座位计时。
-					if socket.outgoing.try_send(message.data.to_vec()).is_err() {
+					if let Err(error) = socket.outgoing.try_send(message.data.to_vec()) {
+						srvpro3_log::warn!("房间 {room_id} 连接 {id} 转发引擎消息失败：opcode={:?}，{error}", message.data.first());
 						live = None;
 					} else {
 						for frame in welcome { if socket.outgoing.try_send(frame).is_err() { break; } }
@@ -271,10 +276,17 @@ pub async fn run(
 				let kicked = if let ctos::Message::HsKick(kick) = &message { Some(kick.pos) } else { None };
 				{
 					let mut record = record.lock().unwrap();
+					if matches!(message, ctos::Message::HsReady(_) | ctos::Message::HsStart(_) | ctos::Message::HandResult(_) | ctos::Message::TpResult(_)) {
+						let position = record.players.get(&id).map(|player| player.position);
+						srvpro3_log::info!("房间 {room_id} 连接 {id} 客户端输入：{:?}，position={position:?}，stage={:?}", ctos::MessageType::from(&message), record.stage);
+					}
 					record.observe_input(id, &message);
 					if matches!(message, ctos::Message::Chat(_)) { record.update_info(&rooms, &room_id); }
 				}
-				if engine_input.try_send(message).is_err() { break; }
+				if let Err(error) = engine_input.try_send(message) {
+					srvpro3_log::warn!("房间 {room_id} 连接 {id} 转发客户端消息失败：{error}");
+					break;
+				}
 				if let Some(target) = kicked {
 					disconnect_kicked_player(&record, id, target);
 				}
