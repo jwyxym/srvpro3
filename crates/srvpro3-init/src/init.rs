@@ -10,7 +10,6 @@ pub async fn init() -> Result<(), Error> {
 		srvpro3_cards::init().await?;
 		srvpro3_database::init().await?;
 		srvpro3_server::init().await?;
-		srvpro3_windbot::init()?;
 		Ok::<(), Error>(())
 	});
 	resources?;

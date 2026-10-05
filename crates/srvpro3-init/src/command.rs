@@ -59,6 +59,5 @@ async fn reload() -> Result<(), Error> {
 	srvpro3_database::init().await?;
 	srvpro3_http::reload().await?;
 	srvpro3_server::reload().await?;
-	srvpro3_windbot::init()?;
 	Ok(())
 }
