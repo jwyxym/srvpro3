@@ -297,24 +297,26 @@ impl Server {
 
 	fn resume_connection(&self, connection: transport::Connection) -> Option<transport::Connection> {
 		let version: Option<u16> = reconnect::version(&connection);
-		let candidates: Vec<_> = self.resumes.values().filter(|handle| {
-			handle.available.load(std::sync::atomic::Ordering::Acquire)
-				&& handle.ip == connection.peer_ip && handle.name == connection.handshake.name
-				&& handle.pass == connection.handshake.pass && handle.version == version
+		let candidates: Vec<&reconnect::Handle> = self.resumes.iter().filter_map(|(&id, handle)| {
+			if self.reconnect_timeout_secs == 0 || handle.sender.is_closed()
+				|| handle.ip != connection.peer_ip || handle.name != connection.handshake.name
+				|| handle.pass != connection.handshake.pass || handle.version != version { return None; }
+			let room: &RoomEntry = self.rooms.get(&handle.room_id)?;
+			reconnect::eligible(&room.record.lock().unwrap(), id).then_some(handle)
 		}).collect();
 		if !candidates.is_empty() {
 			if candidates.len() == 1 {
-				let handle = candidates[0];
-				if handle.available.swap(false, std::sync::atomic::Ordering::AcqRel) {
+				let handle: &reconnect::Handle = candidates[0];
+				if !handle.resuming.swap(true, std::sync::atomic::Ordering::AcqRel) {
 					if let Err(error) = handle.sender.try_send(connection) {
-						handle.available.store(true, std::sync::atomic::Ordering::Release);
+						handle.resuming.store(false, std::sync::atomic::Ordering::Release);
 						Self::reject_connection(error.into_inner());
 					}
 				} else {
 					Self::reject_connection(connection);
 				}
 			} else {
-				warn!("同 IP、名字和房间存在多个断线座位，拒绝不明确的重连");
+				warn!("同 IP、名字和房间存在多个玩家座位，拒绝不明确的重连");
 				Self::reject_connection(connection);
 			}
 			return None;
@@ -482,13 +484,14 @@ impl Server {
 		let output = room.host.add(Box::pin(input));
 		let finished: Receiver<bool> = room.host.finished_sender.subscribe();
 		let (resume_sender, resume_receiver) = mpsc::channel(1);
-		let available = Arc::new(AtomicBool::new(false));
+		let resuming: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
 		self.resumes.insert(connection_id, reconnect::Handle {
 			ip: connection.peer_ip,
 			name: connection.handshake.name.clone(),
 			pass: connection.handshake.pass.clone(),
 			version,
-			available: available.clone(),
+			room_id: room_id.clone(),
+			resuming: resuming.clone(),
 			sender: resume_sender,
 		});
 		let disconnected_tx: mpsc::UnboundedSender<(String, u64)> = self.disconnected_tx.clone();
@@ -499,7 +502,7 @@ impl Server {
 			bot::command("/ai", &record, &room_id, connection_id);
 		}
 		self.connections.spawn(async move {
-			reconnect::run(connection, resume_receiver, available, engine_input, output, finished,
+			reconnect::run(connection, resume_receiver, resuming, engine_input, output, finished,
 				record, room_list, room_id.clone(), connection_id, seconds).await;
 			let _ = disconnected_tx.send((room_id, connection_id));
 		});

@@ -1,6 +1,6 @@
 use std::{any::Any, time::Duration};
 use ygopro::{command::{CommandHandler, COMMANDS}, duel::{Duel, Request, SendTarget}, message, player::AllowMessage, ygopro_handlers::{Handler, HandlerEx, YGOPRO_HANDLERS, YGOPRO_HANDLERS_EX}};
-use ygopro_data::{constants::{Color, DuelStage, Netplayer}, message::{ctos, stoc}};
+use ygopro_data::{constants::{Color, DuelStage, Mode, Netplayer}, data::Deck, message::{ctos, stoc}};
 use ygopro_derive::{after, command, register_to, Attachment};
 use super::recorder::RecordConfig;
 
@@ -115,17 +115,29 @@ fn srvpro_interrupt(duel: &mut Duel, _: &mut Box<dyn Any + Send>, config: Record
 	"terminate"
 }
 
+fn deck_count(duel: &Duel, slot: u8) -> Option<stoc::DeckCount> {
+	let team_size: u8 = if duel.host_info.mode == Mode::Tag { 2 } else { 1 };
+	let own_slot: u8 = slot / team_size * team_size;
+	let opponent_slot: u8 = own_slot ^ team_size;
+	let own: &Deck = &duel.get_net(Netplayer::Player(own_slot))?.deck;
+	let opponent: &Deck = &duel.get_net(Netplayer::Player(opponent_slot))?.deck;
+	Some(stoc::DeckCount {
+		mainc_s: own.main.len() as u16, sidec_s: own.side.len() as u16, extrac_s: own.extra.len() as u16,
+		mainc_o: opponent.main.len() as u16, sidec_o: opponent.side.len() as u16, extrac_o: opponent.extra.len() as u16,
+	})
+}
+
 // 仅服务器在卡组校验通过后调用；在引擎线程内读取状态，避免恢复旧快照。
 #[command]
 #[register_to(COMMANDS as CommandHandler with &'static str)]
 fn srvpro_resume(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, config: RecordConfig) -> &'static str {
 	let Some(&slot) = arguments.downcast_ref::<u8>() else { return "continue" };
-	let position = Netplayer::Player(slot);
+	let position: Netplayer = Netplayer::Player(slot);
 	let Some(player) = duel.get_net(position) else { return "continue" };
-	let ready = player.ready;
-	let select_hand = matches!(player.state, AllowMessage::Some(ctos::MessageType::HandResult));
-	let select_tp = matches!(player.state, AllowMessage::Some(ctos::MessageType::TpResult));
-	let target = SendTarget::Single(position);
+	let ready: bool = player.ready;
+	let select_hand: bool = matches!(player.state, AllowMessage::Some(ctos::MessageType::HandResult));
+	let select_tp: bool = matches!(player.state, AllowMessage::Some(ctos::MessageType::TpResult));
+	let target: SendTarget = SendTarget::Single(position);
 	duel.sender.send(stoc::TypeChange { player: position, host: duel.host_player == position }.into(), target.clone());
 	for (index, player) in duel.players.iter().enumerate() {
 		if let Some(player) = player {
@@ -137,9 +149,12 @@ fn srvpro_resume(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, config: R
 			config.0.lock().unwrap().refreshing.insert(slot);
 			let _ = duel.request_sender.send(Request::Message(ygopro::ygopro_handlers::Request { message: ctos::RequestField.into(), extra: position }));
 		}
-		DuelStage::Siding if !ready => duel.sender.send(stoc::ChangeSide.into(), target),
 		DuelStage::Finger | DuelStage::Firstgo | DuelStage::Siding => {
 			duel.sender.send(stoc::DuelStart.into(), target.clone());
+			if matches!(duel.stage, DuelStage::Finger | DuelStage::Firstgo) {
+				if let Some(count) = deck_count(duel, slot) { duel.sender.send(count.into(), target.clone()); }
+			}
+			if duel.stage == DuelStage::Siding && !ready { duel.sender.send(stoc::ChangeSide.into(), target.clone()); }
 			if select_hand { duel.sender.send(stoc::SelectHand.into(), target.clone()); }
 			if select_tp { duel.sender.send(stoc::SelectTp.into(), target); }
 		}
