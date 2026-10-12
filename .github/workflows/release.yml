@@ -96,9 +96,8 @@ jobs:
           Copy-Item "target/release/$env:BINARY" $bundle
           Copy-Item -LiteralPath default -Destination "$bundle/default" -Recurse
           Copy-Item -LiteralPath srvpro3-front/dist -Destination "$bundle/webui" -Recurse
-          Invoke-WebRequest -Uri "https://github.com/jwyxym/windbot/releases/download/release-latest/windbot-linux-x64.zip" -OutFile windbot.zip
-          Expand-Archive -Path windbot.zip -DestinationPath windbot-resources
-          Copy-Item -LiteralPath windbot-resources/bots.json -Destination "$bundle/windbot/bots.json"
+          Invoke-WebRequest -Uri "https://github.com/mycard/windbot/raw/refs/heads/master/bots.json" -OutFile "$bundle/windbot/bots.json" -TimeoutSec 60 -MaximumRetryCount 3 -RetryIntervalSec 5 -ErrorAction Stop
+          Get-Content -LiteralPath "$bundle/windbot/bots.json" -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop | Out-Null
           Compress-Archive -Path "$bundle/*" -DestinationPath $archive
           "archive=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
 
