@@ -30,7 +30,8 @@ pub async fn command() -> Result<(), Error> {
 			},
 			Some(response) = reload_requests.recv() => Some(response),
 			_ = &mut timer, if !reload_interval.is_zero() => {
-				if let Err(error) = srvpro3_cards::init().await {
+				if let Err(error) = srvpro3_cards::init().await
+					.and_then(|()| srvpro3_server::reload_cards()) {
 					error!("定时重载卡片失败：{error:#}");
 				}
 				// 从本次完成时计时，失败也等待一个周期再重试。
