@@ -35,11 +35,14 @@ fn valid_key(key: &str) -> Result<()> {
 }
 
 pub fn local_directory() -> Result<PathBuf> {
-	let directory: PathBuf = PathBuf::from(config()?.local.directory);
+	resolve_local_directory(&config()?.local.directory)
+}
+
+fn resolve_local_directory(directory: &str) -> Result<PathBuf> {
+	let directory: PathBuf = PathBuf::from(directory);
 	ensure!(!directory.as_os_str().is_empty(), "本地录像目录不能为空");
 	if directory.is_absolute() { return Ok(directory); }
-	let executable: PathBuf = std::env::current_exe().context("获取服务端可执行文件路径失败")?;
-	Ok(executable.parent().context("获取服务端所在目录失败")?.join(directory))
+	Ok(std::env::current_dir().context("获取进程工作目录失败")?.join(directory))
 }
 
 /// 校验规范化后的路径，禁止通过路径穿越或符号链接读取录像目录外的文件。
@@ -115,10 +118,7 @@ async fn store_with_config(bytes: &[u8], settings: ReplayStorage) -> Result<Stri
 	match settings.mode {
 		ReplayStorageMode::Database => unreachable!(),
 		ReplayStorageMode::Local => {
-			let directory: PathBuf = PathBuf::from(&settings.local.directory);
-			let directory: PathBuf = if directory.is_absolute() { directory } else {
-				std::env::current_exe()?.parent().context("获取服务端目录失败")?.join(directory)
-			};
+			let directory: PathBuf = resolve_local_directory(&settings.local.directory)?;
 			let path: PathBuf = directory.join(&key);
 			fs::create_dir_all(path.parent().context("录像目录无效")?).await?;
 			let temporary: PathBuf = path.with_extension("tmp");

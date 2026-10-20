@@ -50,7 +50,7 @@
 		replay_storage : '录像存储',
 		'replay_storage.mode' : '存储模式（database / local / s3）',
 		'replay_storage.local' : '本地文件',
-		'replay_storage.local.directory' : '录像目录（相对于可执行文件）',
+		'replay_storage.local.directory' : '录像目录',
 		'replay_storage.s3' : 'S3 对象存储',
 		endpoint : 'S3 接口地址',
 		region : 'S3 区域',
