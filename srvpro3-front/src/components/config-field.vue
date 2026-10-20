@@ -27,7 +27,7 @@
 	</div>
 </template>
 <script setup lang = 'ts'>
-	import { computed, ref } from 'vue';
+	import { computed, ref, type ComputedRef } from 'vue';
 	export type ConfigValue = string | number | boolean | ConfigValue[] | { [key : string] : ConfigValue };
 	const model = defineModel<ConfigValue>({ required : true });
 	const props = defineProps<{ path : string; disabled : boolean }>();
@@ -47,6 +47,20 @@
 		cards : '卡片资源',
 		windbot : '机器人',
 		tournament : '比赛',
+		replay_storage : '录像存储',
+		'replay_storage.mode' : '存储模式（database / local / s3）',
+		'replay_storage.local' : '本地文件',
+		'replay_storage.local.directory' : '录像目录（相对于可执行文件）',
+		'replay_storage.s3' : 'S3 对象存储',
+		endpoint : 'S3 接口地址',
+		region : 'S3 区域',
+		bucket : 'S3 桶名',
+		prefix : '对象路径前缀',
+		access_key_id : 'Access Key ID',
+		secret_access_key : 'Secret Access Key',
+		session_token : '临时凭据 Token',
+		path_style : '使用路径形式访问桶',
+		presign_expiry : '下载链接有效期（秒）',
 		'server.tcp' : 'TCP',
 		'server.udp' : 'KCP / UDP',
 		'server.ws' : 'WebSocket',
@@ -92,7 +106,7 @@
 	};
 	const title = computed(() => labels[props.path] ?? labels[props.path.split('.').at(-1)!] ?? props.path.split('.').at(-1)!);
 	const inputId = computed(() => `config-${props.path}`);
-	const secret = computed(() => /\.(password|token)$/.test(props.path));
+	const secret : ComputedRef<boolean> = computed(() : boolean => /\.(password|token|access_key_id|secret_access_key|session_token)$/.test(props.path));
 	const setField = (key : string, value : ConfigValue) => {
 		if (isObject(model.value)) model.value[key] = value;
 	};

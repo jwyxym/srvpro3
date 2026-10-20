@@ -5,6 +5,7 @@ mod server;
 mod cards;
 mod windbot;
 mod tournament;
+mod replay_storage;
 
 pub use server::Server;
 
@@ -14,6 +15,7 @@ pub use api::{HttpApi, User, Permissions};
 pub use cards::Cards;
 pub use windbot::WindBot;
 pub use tournament::Tournament;
+pub use replay_storage::{ReplayStorage, ReplayStorageMode, LocalReplayStorage, S3ReplayStorage};
 
 use serde::{Deserialize, Serialize};
 
@@ -29,4 +31,5 @@ pub struct Config {
 	pub cards: Cards,
 	pub windbot: WindBot,
 	pub tournament: Tournament,
+	pub replay_storage: ReplayStorage,
 }

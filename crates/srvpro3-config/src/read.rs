@@ -9,6 +9,7 @@ pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 
 pub fn init(text: &str) -> Result<(), Error> {
 	let new_config: Config = from_str(text)?;
+	new_config.replay_storage.validate()?;
 
 	if let Some(config) = CONFIG.get() {
 		let mut current = config.write();

@@ -22,7 +22,7 @@ use ygopro_data::{
 };
 
 use srvpro3_cards::CardsSnapshot;
-use srvpro3_config::Config;
+use srvpro3_config::{Config, ReplayStorage};
 use srvpro3_log::*;
 
 static SCRIPT_BUFFER: Mutex<[u8; 0x100000]> = Mutex::new([0u8; 0x100000]);
@@ -135,6 +135,8 @@ pub async fn init() -> Result<(), Error> {
 }
 
 pub async fn reload() -> Result<(), Error> {
+	let storage: ReplayStorage = srvpro3_config::get()?.replay_storage.clone();
+	crate::replay_storage::validate_settings(&storage)?;
 	reload_cards()?;
 	super::server::messages::reload().await?;
 	let config: RwLockReadGuard<'_, RawRwLock, Config> = srvpro3_config::get()?;

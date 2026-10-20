@@ -1,4 +1,5 @@
-use axum::{extract::{Json, Query}, http::{header, StatusCode}, response::{IntoResponse, Response}};
+use std::path::PathBuf;
+use axum::{extract::{Json, Path, Query, Request}, http::{header, StatusCode}, response::{IntoResponse, Redirect, Response}};
 use serde::{Deserialize, Serialize};
 use parking_lot::{RawRwLock, lock_api::RwLockReadGuard};
 
@@ -9,22 +10,61 @@ use srvpro3_config::Config;
 
 static DOWNLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 
+/// 文件名包含随机标识，URL 本身作为下载凭证；不公开目录列表。
+pub async fn local_download(Path(key): Path<String>, request: Request) -> Result<Response, (StatusCode, &'static str)> {
+	check()?;
+	let path: PathBuf = srvpro3_server::replay_storage::local_file(&key).await
+		.map_err(|_| (StatusCode::NOT_FOUND, "录像文件不存在"))?;
+	let mut response: Response = tower_http::services::ServeFile::new(path).try_call(request).await
+		.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "读取录像文件失败"))?.into_response();
+	response.headers_mut().insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/gzip"));
+	response.headers_mut().insert(header::CONTENT_DISPOSITION, header::HeaderValue::from_static("attachment; filename=\"replay.yrp3d.gz\""));
+	response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS, header::HeaderValue::from_static("nosniff"));
+	Ok(response)
+}
+
 #[derive(Deserialize)]
 pub struct DownloadQuery {
 	pub id: i64,
 }
 
-pub async fn download(Query(query): Query<DownloadQuery>) -> Result<Response, (StatusCode, &'static str)> {
+async fn replay_record(id: i64) -> Result<Model, (StatusCode, &'static str)> {
 	check()?;
-	if query.id <= 0 { return Err((StatusCode::BAD_REQUEST, "历史记录 ID 必须为正整数")); }
-	let permit = DOWNLOADS.try_acquire().map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "录像下载繁忙，请稍后重试"))?;
-	let _db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
-	let record = tokio::time::timeout(std::time::Duration::from_secs(10), srvpro3_database::history::read::by_id(query.id))
+	if id <= 0 { return Err((StatusCode::BAD_REQUEST, "历史记录 ID 必须为正整数")); }
+	let record: Model = tokio::time::timeout(std::time::Duration::from_secs(10), srvpro3_database::history::read::by_id(id))
 		.await.map_err(|_| (StatusCode::GATEWAY_TIMEOUT, "查询录像超时"))?
 		.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "查询录像失败"))?
 		.ok_or((StatusCode::NOT_FOUND, "历史记录不存在"))?;
 	if record.replay.as_ref().is_none_or(|value| value.is_empty()) {
 		return Err((StatusCode::NOT_FOUND, "该历史记录没有录像"));
+	}
+	Ok(record)
+}
+
+async fn replay_url(reference: &str) -> Result<Option<String>, (StatusCode, &'static str)> {
+	srvpro3_server::replay_storage::download_url(reference).await.map_err(|error| {
+		log::warn!("生成录像下载 URL 失败：{error:#}");
+		(StatusCode::SERVICE_UNAVAILABLE, "生成录像下载 URL 失败，请检查存储配置")
+	})
+}
+
+#[derive(Serialize)]
+pub struct DownloadUrlResponse {
+	url: Option<String>,
+}
+
+pub async fn download_url(Query(query): Query<DownloadQuery>) -> Result<Json<DownloadUrlResponse>, (StatusCode, &'static str)> {
+	let record: Model = replay_record(query.id).await?;
+	let url: Option<String> = replay_url(record.replay.as_deref().unwrap_or_default()).await?;
+	Ok(Json(DownloadUrlResponse { url }))
+}
+
+pub async fn download(Query(query): Query<DownloadQuery>) -> Result<Response, (StatusCode, &'static str)> {
+	let permit: tokio::sync::SemaphorePermit<'_> = DOWNLOADS.try_acquire()
+		.map_err(|_| (StatusCode::TOO_MANY_REQUESTS, "录像下载繁忙，请稍后重试"))?;
+	let record: Model = replay_record(query.id).await?;
+	if let Some(url) = replay_url(record.replay.as_deref().unwrap_or_default()).await? {
+		return Ok(Redirect::temporary(&url).into_response());
 	}
 	let bytes = tokio::task::spawn_blocking(move || {
 		let _permit = permit;
@@ -47,7 +87,7 @@ pub struct ListResponse {
 	total: u64,
 }
 
-/// 对外只提供录像是否存在，不发送录像正文；数据库仍保存完整内容。
+/// 保留旧版 replay 布尔字段；外部存储另提供下载 URL，不发送录像正文。
 #[derive(Serialize)]
 pub struct RecordResponse {
 	id: i64,
@@ -62,6 +102,8 @@ pub struct RecordResponse {
 	winner_id: Option<String>,
 	room_id: String,
 	replay: bool,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	replay_url: Option<String>,
 	created_at: i64,
 }
 
@@ -80,9 +122,19 @@ impl From<Model> for RecordResponse {
 			winner_id: record.winner_id,
 			room_id: record.room_id,
 			replay: record.replay.is_some_and(|value| !value.is_empty()),
+			replay_url: None,
 			created_at: record.created_at,
 		}
 	}
+}
+
+pub async fn record_response(record: Model) -> RecordResponse {
+	let url: Option<String> = if let Some(reference) = record.replay.as_deref() {
+		replay_url(reference).await.unwrap_or_default()
+	} else { None };
+	let mut response: RecordResponse = record.into();
+	response.replay_url = url;
+	response
 }
 
 #[derive(Deserialize)]
@@ -138,7 +190,9 @@ pub async fn list(
 		.map_err(|_| {
 			(StatusCode::INTERNAL_SERVER_ERROR, "查询历史记录失败")
 		})?;
-	Ok(Json(ListResponse { list: list.into_iter().map(RecordResponse::from).collect(), total }))
+	let mut records: Vec<RecordResponse> = Vec::with_capacity(list.len());
+	for record in list { records.push(record_response(record).await); }
+	Ok(Json(ListResponse { list: records, total }))
 }
 
 pub async fn create(
@@ -146,12 +200,19 @@ pub async fn create(
 ) -> Result<Json<RecordResponse>, (StatusCode, &'static str)> {
 	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
+	let replay: Option<String> = match request.replay {
+		Some(value) => Some(srvpro3_server::replay_storage::store_encoded(value).await.map_err(|error| {
+			log::warn!("保存上传录像失败：{error:#}");
+			(StatusCode::BAD_REQUEST, "保存录像失败，请检查录像内容和存储配置")
+		})?),
+		None => None,
+	};
 	let record: Model = srvpro3_database::history::create(
 		&db, request.player_a, request.player_b, request.deck_a, request.deck_b,
-		request.winner_id, request.room_id, request.replay,
+		request.winner_id, request.room_id, replay,
 		request.player_c, request.player_d, request.deck_c, request.deck_d,
 	).await.map_err(|_| (StatusCode::BAD_REQUEST, "新增历史记录失败"))?;
-	Ok(Json(record.into()))
+	Ok(Json(record_response(record).await))
 }
 
 pub async fn update(
@@ -159,9 +220,13 @@ pub async fn update(
 ) -> Result<Json<RecordResponse>, (StatusCode, &'static str)> {
 	check()?;
 	let db = srvpro3_database::db().map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "数据库未启用"))?;
-	let record: Model = srvpro3_database::history::update(&db, request.id, request.winner_id, request.replay)
+	let replay: String = srvpro3_server::replay_storage::store_encoded(request.replay).await.map_err(|error| {
+		log::warn!("更新上传录像失败：{error:#}");
+		(StatusCode::BAD_REQUEST, "保存录像失败，请检查录像内容和存储配置")
+	})?;
+	let record: Model = srvpro3_database::history::update(&db, request.id, request.winner_id, replay)
 		.await.map_err(|_| (StatusCode::NOT_FOUND, "历史记录不存在或修改失败"))?;
-	Ok(Json(record.into()))
+	Ok(Json(record_response(record).await))
 }
 
 pub async fn delete(

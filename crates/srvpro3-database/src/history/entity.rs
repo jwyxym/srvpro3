@@ -19,7 +19,7 @@ pub struct Model {
 	pub winner_id: Option<String>, // 胜利者名称；无胜者时为空
 	pub room_id: String,        // 房间
 	#[sea_orm(column_type = "Text")]
-	pub replay: Option<String>, // 上游 .yrp3d 文件：yrp3d:v1: + gzip/Base64
+	pub replay: Option<String>, // yrp3d:v1: + gzip/Base64，或 local:v1:相对路径、s3:v1:对象 key
 	pub created_at: i64,        // 时间戳
 }
 

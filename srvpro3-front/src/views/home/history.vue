@@ -25,7 +25,7 @@
 				</el-table-column>
 				<el-table-column label = '录像' min-width = '110'>
 					<template #default = '{ row }'>
-						<el-button v-if = 'row.replay' link type = 'primary' :loading = 'page.downloading === row.id' :disabled = 'page.downloading !== null && page.downloading !== row.id' :aria-label = '`下载回放 R#${row.id}`' title = '点击下载回放' @click = 'page.download_replay(row.id)'>R#{{ row.id }}</el-button>
+						<el-button v-if = 'row.replay' link type = 'primary' :loading = 'page.downloading === row.id' :disabled = 'page.downloading !== null && page.downloading !== row.id' :aria-label = '`下载回放 R#${row.id}`' title = '点击下载回放' @click = 'page.download_replay(row.id, row.replay_url)'>R#{{ row.id }}</el-button>
 					</template>
 				</el-table-column>
 				<el-table-column prop = 'player_a' label = '对战方 A' min-width = '170'>
@@ -59,6 +59,7 @@
 	interface RecordInfo {
 		id : number; room_id : string; player_a : string; player_b : string;
 		deck_a : string; deck_b : string; winner_id : string | null; replay : boolean; created_at : number;
+		replay_url ?: string;
 		player_c : string | null; player_d : string | null; deck_c : string | null; deck_d : string | null;
 	}
 	const controller = new AbortController();
@@ -74,10 +75,29 @@
 		error : '',
 		deleting : null as number | 'all' | null,
 		downloading : null as number | null,
-		download_replay : async (id : number) => {
+		download_replay : async function (id : number, external_url ?: string) : Promise<void> {
 			if (page.downloading !== null || controller.signal.aborted) return;
 			page.downloading = id;
 			try {
+				if (external_url) {
+					// 点击时重新获取地址，避免历史列表中的 S3 签名已经过期。
+					const target_path : string = '/history/replay/url';
+					const target_query : URLSearchParams = new URLSearchParams({ id : String(id) });
+					const target_response : Response = await fetch(target_path + await admin.to_query(target_path, 'GET', target_query, controller.signal), { signal : controller.signal });
+					if (!target_response.ok) throw new Error(await target_response.text() || `获取下载地址失败：${target_response.status}`);
+					const target : { url : string | null } = await target_response.json() as { url : string | null };
+					if (controller.signal.aborted) return;
+					if (target.url) {
+						const link : HTMLAnchorElement = document.createElement('a');
+						link.href = target.url;
+						link.download = `replay-${id}.yrp3d.gz`;
+						link.rel = 'noopener noreferrer';
+						link.referrerPolicy = 'no-referrer';
+						document.body.appendChild(link);
+						try { link.click(); } finally { link.remove(); }
+						return;
+					}
+				}
 				const key = `replay::R#${id}`;
 				let blob = cache.get(key) as Blob | undefined;
 				if (!blob) {

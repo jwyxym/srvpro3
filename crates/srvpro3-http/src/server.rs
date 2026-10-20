@@ -69,10 +69,12 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/room", delete(room::interrupt))
 		.route("/history", get(history::list))
 		.route("/history/replay", get(history::download))
+		.route("/history/replay/url", get(history::download_url))
 		.route("/history", post(history::create))
 		.route("/history", put(history::update))
 		.route("/history", delete(history::delete))
 		.route_layer(middleware::from_fn(auth::authorize))
+		.route("/replay/{*key}", get(history::local_download))
 		.route("/auth/public-key", get(auth::crypto::public_key))
 		.merge(webui::router());
 	if !room || !ws {

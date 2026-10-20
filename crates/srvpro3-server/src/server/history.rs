@@ -1,11 +1,8 @@
 use anyhow::{Context, Result};
 use std::io::{Cursor, Write};
-use base64::{Engine, engine::general_purpose::STANDARD};
 use binrw::BinWrite;
 use flate2::{Compression, write::GzEncoder};
 use ygopro_data::message::{stoc, gm::{self, GameMessage}};
-
-pub const REPLAY_PREFIX: &str = "yrp3d:v1:";
 
 /// 每局开始时固定玩家和卡组，避免换备、断线及换座位影响历史记录。
 #[derive(Clone, Debug)]
@@ -61,12 +58,20 @@ pub fn replay_buffer(duel: &ygopro::duel::Duel, history: &HistoryRecord) -> Resu
 
 pub async fn persist(record: HistoryRecord, buffer: Option<Vec<u8>>) -> Result<()> {
 	let db = srvpro3_database::db().context("获取数据库连接失败")?;
-	let replay = if let Some(buffer) = buffer {
-		Some(tokio::task::spawn_blocking(move || -> Result<String> {
-		let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
-		gzip.write_all(&buffer).context("压缩录像失败")?;
-		Ok(format!("{REPLAY_PREFIX}{}", STANDARD.encode(gzip.finish().context("完成录像压缩失败")?)))
-		}).await.context("录像压缩任务失败")??)
+	let replay: Option<String> = if let Some(buffer) = buffer {
+		let compressed: Vec<u8> = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
+			let mut gzip: GzEncoder<Vec<u8>> = GzEncoder::new(Vec::new(), Compression::default());
+			gzip.write_all(&buffer).context("压缩录像失败")?;
+			gzip.finish().context("完成录像压缩失败")
+		}).await.context("录像压缩任务失败")??;
+		// 外部存储暂时不可用时保留旧格式，避免丢失已录制的录像。
+		match crate::replay_storage::store(&compressed).await {
+			Ok(reference) => Some(reference),
+			Err(error) => {
+				srvpro3_log::error!("保存房间 {} 的外部录像失败，本局回退为数据库存储：{error:#}", record.room_id);
+				Some(crate::replay_storage::database_reference(&compressed)?)
+			},
+		}
 	} else { None };
 	let winner = match record.winner_id {
 		Some(0) => Some(record.player_a.clone()),

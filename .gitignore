@@ -2,6 +2,7 @@
 /ygopro
 /windbot
 /webui
+/replay
 /config.toml
 *.db
 default/dialogues.json

@@ -111,6 +111,8 @@ pub async fn save(Extension(credentials): Extension<Credentials>, Json(request):
 		}
 		let parsed: srvpro3_config::Config = basic_toml::from_str(&content)
 			.map_err(|_| (StatusCode::BAD_REQUEST, "TOML 格式或配置字段类型不正确"))?;
+		srvpro3_server::replay_storage::validate_settings(&parsed.replay_storage)
+			.map_err(|_| (StatusCode::BAD_REQUEST, "录像存储配置无效，请检查模式、目录和 S3 参数"))?;
 		if parsed.http_api.webui != webui {
 			return Err((StatusCode::FORBIDDEN, "不允许修改 http_api.webui"));
 		}
