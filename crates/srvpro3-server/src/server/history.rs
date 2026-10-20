@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::io::{Cursor, Write};
 use binrw::BinWrite;
 use flate2::{Compression, write::GzEncoder};
-use ygopro_data::message::{stoc, gm::{self, GameMessage}};
+use ygopro_data::message::{stoc, gm};
 
 /// 每局开始时固定玩家和卡组，避免换备、断线及换座位影响历史记录。
 #[derive(Clone, Debug)]
@@ -43,12 +43,10 @@ pub fn replay_buffer(duel: &ygopro::duel::Duel, history: &HistoryRecord) -> Resu
 		master_rule: duel.host_info.duel_rule,
 	};
 	let mut replay = ygopro_data::data::forge::Replay { messages: vec![names.into()] };
-	for (index, message) in recorded[start..].iter().enumerate() {
+	for message in super::spectate::public_messages(&recorded[start..]) {
 		let stoc::Message::GameMessage(game) = message.try_get().context("解析录像消息失败")? else { continue; };
 		let message = &game.message;
-		// 后续重连场面快照的 START 不能覆盖真正开局的观战 START。
-		if (index != 0 && matches!(message, gm::Message::Start(_))) || message.waiting_for().is_some()
-			|| matches!(message, gm::Message::SibylName(_) | gm::Message::SibylChat(_) | gm::Message::SibylReplay(_)) { continue; }
+		if matches!(message, gm::Message::SibylName(_) | gm::Message::SibylChat(_) | gm::Message::SibylReplay(_)) { continue; }
 		replay.messages.push(message.clone());
 	}
 	let mut buffer = Cursor::new(Vec::new());

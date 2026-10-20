@@ -11,15 +11,33 @@ use ygopro_derive::{after, command, register_to};
 
 pub const NAME: &str = module_path!();
 
+/// RequestField 的定向恢复消息也被上游记入 masked_messages，不能重放给观战者或写入录像。
+pub fn public_messages(recorded: &[Complex<stoc::Message>]) -> impl Iterator<Item = &Complex<stoc::Message>> {
+	let mut restoring: bool = false;
+	recorded.iter().filter(move |&message: &&Complex<stoc::Message>| {
+		match message.deref() {
+			stoc::Message::FieldFinish(_) => {
+				restoring = false;
+				false
+			},
+			stoc::Message::GameMessage(game) => {
+				if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 == 0) {
+					restoring = true;
+				}
+				!restoring && game.message.waiting_for().is_none()
+			},
+			_ => false,
+		}
+	})
+}
+
 /// 当前小局的公开游戏消息，同时供中途观战和录像保存使用。
 pub fn messages(duel: &Duel) -> impl Iterator<Item = &Complex<stoc::Message>> {
 	let recorded = &duel.sender.masked_messages;
 	let start = recorded.iter().rposition(|message| {
 		matches!(message.deref(), stoc::Message::GameMessage(game) if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 != 0))
 	}).unwrap_or(recorded.len());
-	recorded.iter().skip(start).filter(|&message| {
-		matches!(message.deref(), stoc::Message::GameMessage(game) if game.message.waiting_for().is_none())
-	})
+	public_messages(&recorded[start..])
 }
 
 #[command]
