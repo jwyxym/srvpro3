@@ -31,6 +31,8 @@ mode = "database"
 directory = "replay"
 
 [replay_storage.s3]
+# 公开下载地址 https://example.com/桶名
+public_url = ""
 # S3 API endpoint，包含 http:// 或 https://
 # AWS S3 可留空，按 region 确定地址
 endpoint = ""
@@ -44,7 +46,9 @@ secret_access_key = ""
 session_token = ""
 # true 使用 endpoint/bucket/key，适合 MinIO 等；false 使用 bucket.endpoint/key
 path_style = true
-# 私有桶下载签名有效期，1 到 604800 秒；点击下载时重新签名，无需公开桶或配置浏览器 CORS
+# true 返回临时签名 URL；false 返回 public_url 的公开常驻 URL
+presign_download = false
+# 临时签名下载链接有效期，1 到 604800 秒；每次获取下载链接时重新签名
 presign_expiry = 900
 # 上传和读取请求超时，1 到 300 秒。
 timeout = 30

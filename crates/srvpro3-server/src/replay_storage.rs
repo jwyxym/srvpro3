@@ -19,6 +19,7 @@ fn config() -> Result<ReplayStorage> {
 pub fn validate_settings(settings: &ReplayStorage) -> Result<()> {
 	settings.validate()?;
 	if settings.mode == ReplayStorageMode::S3 {
+		let _: Option<String> = public_url(&settings.s3, "validation.yrp3d.gz")?;
 		let prefix: &str = settings.s3.prefix.trim_matches('/');
 		if !prefix.is_empty() { valid_key(prefix)?; }
 		let _: Box<Bucket> = bucket(&settings.s3)?;
@@ -54,6 +55,23 @@ pub async fn local_file(key: &str) -> Result<PathBuf> {
 	ensure!(path.starts_with(&directory), "录像文件超出配置目录");
 	ensure!(fs::metadata(&path).await?.is_file(), "录像路径不是文件");
 	Ok(path)
+}
+
+fn public_url(settings: &S3ReplayStorage, key: &str) -> Result<Option<String>> {
+	if settings.public_url.is_empty() { return Ok(None); }
+	let url: reqwest::Url = settings.public_url.parse().context("S3 public_url 必须是完整 URL")?;
+	ensure!(matches!(url.scheme(), "http" | "https") && url.host_str().is_some()
+		&& url.username().is_empty() && url.password().is_none()
+		&& url.query().is_none() && url.fragment().is_none(), "S3 public_url 无效");
+	Ok(Some(format!("{}/{key}", url.as_str().trim_end_matches('/'))))
+}
+
+fn public_key<'a>(reference: &'a str, settings: &S3ReplayStorage) -> Result<Option<&'a str>> {
+	let Some(base) = public_url(settings, "")? else { return Ok(None); };
+	let Some(key) = reference.strip_prefix(&base) else { return Ok(None); };
+	valid_key(key)?;
+	ensure!(key.ends_with(".yrp3d.gz"), "只允许下载录像文件");
+	Ok(Some(key))
 }
 
 fn bucket(settings: &S3ReplayStorage) -> Result<Box<Bucket>> {
@@ -141,24 +159,44 @@ async fn store_with_config(bytes: &[u8], settings: ReplayStorage) -> Result<Stri
 			let bucket: Box<Bucket> = bucket(&settings.s3)?;
 			let response: ResponseData = bucket.put_object_with_content_type(&key, bytes, "application/gzip").await.context("上传 S3 录像失败")?;
 			ensure!((200..300).contains(&response.status_code()), "上传 S3 录像失败，HTTP {}", response.status_code());
-			Ok(format!("{S3_PREFIX}{key}"))
+			Ok(public_url(&settings.s3, &key)?.unwrap_or_else(|| format!("{S3_PREFIX}{key}")))
 		},
 	}
 }
 
-/// 数据库存储没有外部 URL；S3 每次生成新签名，不缓存签名 URL。
+/// 按配置返回公开常驻地址或每次重新生成的临时签名地址。
 pub async fn download_url(reference: &str) -> Result<Option<String>> {
 	if let Some(key) = reference.strip_prefix(LOCAL_PREFIX) {
 		valid_key(key)?;
 		return Ok(Some(format!("/replay/{key}")));
 	}
-	if let Some(key) = reference.strip_prefix(S3_PREFIX) {
-		valid_key(key)?;
+	if reference.starts_with(S3_PREFIX) || reference.starts_with("http://") || reference.starts_with("https://") {
 		let settings: S3ReplayStorage = config()?.s3;
-		let bucket: Box<Bucket> = bucket(&settings)?;
+		let key: &str = if let Some(key) = reference.strip_prefix(S3_PREFIX) {
+			key
+		} else {
+			public_key(reference, &settings)?.context("录像 URL 不属于配置的 S3 public_url")?
+		};
+		valid_key(key)?;
+		if !settings.presign_download {
+			if let Some(url) = public_url(&settings, key)? { return Ok(Some(url)); }
+		}
+		let mut bucket: Box<Bucket> = bucket(&settings)?;
+		let mut signing_key: &str = key;
+		let public: Option<String> = public_url(&settings, key)?;
+		let public: Option<reqwest::Url> = public.as_deref().map(str::parse).transpose()?;
+		if let Some(url) = public.as_ref() {
+			let (directory, filename): (&str, &str) = url.path().trim_start_matches('/').rsplit_once('/')
+				.context("S3 临时下载地址必须包含对象目录")?;
+			// 在公开域名和路径上直接签名，不能签名后替换域名，否则签名会失效。
+			bucket = bucket.with_path_style();
+			bucket.name = directory.to_owned();
+			bucket.region = Region::Custom { region: settings.region.clone(), endpoint: url.origin().ascii_serialization() };
+			signing_key = filename;
+		}
 		let mut query: HashMap<String, String> = HashMap::new();
 		query.insert("response-content-disposition".into(), "attachment; filename=\"replay.yrp3d.gz\"".into());
-		return Ok(Some(bucket.presign_get(key, settings.presign_expiry, Some(query)).await.context("生成 S3 下载 URL 失败")?));
+		return Ok(Some(bucket.presign_get(signing_key, settings.presign_expiry, Some(query)).await.context("生成 S3 下载 URL 失败")?));
 	}
 	Ok(None)
 }
@@ -169,7 +207,7 @@ pub async fn load(reference: &str) -> Result<Vec<u8>> {
 		let mut bytes: Vec<u8> = Vec::new();
 		file.take(MAX_REPLAY as u64 + 1).read_to_end(&mut bytes).await?;
 		bytes
-	} else if reference.starts_with(S3_PREFIX) {
+	} else if reference.starts_with(S3_PREFIX) || reference.starts_with("http://") || reference.starts_with("https://") {
 		let url: String = download_url(reference).await?.context("缺少 S3 下载 URL")?;
 		let timeout: u64 = config()?.s3.timeout;
 		let client: reqwest::Client = reqwest::Client::builder().timeout(Duration::from_secs(timeout)).build()?;

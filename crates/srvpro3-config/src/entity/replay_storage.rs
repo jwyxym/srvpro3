@@ -33,6 +33,7 @@ impl Default for LocalReplayStorage {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(default)]
 pub struct S3ReplayStorage {
+	pub public_url: String,
 	pub endpoint: String,
 	pub region: String,
 	pub bucket: String,
@@ -41,6 +42,7 @@ pub struct S3ReplayStorage {
 	pub secret_access_key: String,
 	pub session_token: String,
 	pub path_style: bool,
+	pub presign_download: bool,
 	pub presign_expiry: u32,
 	pub timeout: u64,
 }
@@ -48,6 +50,7 @@ pub struct S3ReplayStorage {
 impl Default for S3ReplayStorage {
 	fn default() -> Self {
 		Self {
+			public_url: String::new(),
 			endpoint: String::new(),
 			region: "us-east-1".into(),
 			bucket: String::new(),
@@ -56,6 +59,7 @@ impl Default for S3ReplayStorage {
 			secret_access_key: String::new(),
 			session_token: String::new(),
 			path_style: true,
+			presign_download: false,
 			presign_expiry: 900,
 			timeout: 30,
 		}
