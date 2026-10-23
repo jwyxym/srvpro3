@@ -154,6 +154,13 @@ pub async fn run(
 		}
 		let observer_outgoing = live.as_ref().filter(|_| !pending_observer.is_empty()).map(|socket| socket.outgoing.clone());
 		let verification_deadline: Option<Instant> = pending.as_ref().map(|attempt| attempt.deadline);
+		// 先排完旧连接正在生成的快照，避免旧 FieldFinish 提前释放新连接的刷新状态。
+		let can_verify: bool = pending.is_some() && {
+			let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
+			!record.players.get(&id).is_some_and(|player: &PlayerRecord| {
+				matches!(player.position, Netplayer::Player(slot) if record.refreshing.contains(&slot))
+			})
+		};
 		tokio::select! {
 			// 队列拥堵时暂停读取后续补发消息，仍处理退出和房间结束通知。
 			permit = async move {
@@ -280,7 +287,7 @@ pub async fn run(
 				let attempt: &mut Pending = pending.as_mut().unwrap();
 				if let Some(message) = attempt.initial.pop_front() { return Some(message); }
 				attempt.socket.incoming.as_mut().unwrap().recv().await.and_then(|frame| decode(&frame))
-			}, if pending.is_some() => {
+			}, if can_verify => {
 				let Some(message) = message else { pending = None; continue; };
 				let ctos::Message::UpdateDeck(update) = message else {
 					if matches!(message, ctos::Message::LeaveGame(_)) { pending = None; }
@@ -311,6 +318,8 @@ pub async fn run(
 					player.protocol = attempt.socket.protocol;
 					player.outgoing = attempt.socket.outgoing.clone();
 					player.close = attempt.socket.close.take();
+					// 在引擎执行恢复命令前占用刷新状态，合并新连接立即发来的 RequestField。
+					record.refreshing.insert(slot);
 				}
 				// 保持原引擎通道和连接 ID；旧传输退出不能触发原玩家离房。
 				live = Some(Live { incoming: attempt.socket.incoming.take(), outgoing: attempt.socket.outgoing.clone(), protocol: attempt.socket.protocol, close: None });
@@ -338,6 +347,14 @@ pub async fn run(
 				let kicked = if let ctos::Message::HsKick(kick) = &message { Some(kick.pos) } else { None };
 				{
 					let mut record = record.lock().unwrap();
+					if matches!(message, ctos::Message::RequestField(_)) {
+						let slot: Option<u8> = record.players.get(&id).and_then(|player: &PlayerRecord| {
+							match player.position { Netplayer::Player(slot) => Some(slot), _ => None }
+						});
+						let Some(slot) = slot else { continue; };
+						// 一次快照发送到 FieldFinish 前只接受一个请求，普通手动刷新也走同一规则。
+						if record.stage != DuelStage::Dueling || !record.refreshing.insert(slot) { continue; }
+					}
 					record.observe_input(id, &message);
 					if matches!(message, ctos::Message::Chat(_)) { record.update_info(&rooms, &room_id); }
 				}

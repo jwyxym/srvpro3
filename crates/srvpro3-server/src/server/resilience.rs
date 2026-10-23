@@ -130,6 +130,10 @@ fn deck_count(duel: &Duel, slot: u8) -> Option<stoc::DeckCount> {
 fn srvpro_resume(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, config: RecordConfig) -> &'static str {
 	let Some(&slot) = arguments.downcast_ref::<u8>() else { return "continue" };
 	let position: Netplayer = Netplayer::Player(slot);
+	// 非对局阶段不会产生 FieldFinish，必须释放连接接管时预留的刷新状态。
+	if duel.stage != DuelStage::Dueling || duel.get_net(position).is_none() {
+		config.0.lock().unwrap().refreshing.remove(&slot);
+	}
 	let Some(player) = duel.get_net(position) else { return "continue" };
 	let ready: bool = player.ready;
 	let select_hand: bool = matches!(player.state, AllowMessage::Some(ctos::MessageType::HandResult));
@@ -144,7 +148,9 @@ fn srvpro_resume(duel: &mut Duel, arguments: &mut Box<dyn Any + Send>, config: R
 	match duel.stage {
 		DuelStage::Dueling => {
 			config.0.lock().unwrap().refreshing.insert(slot);
-			let _ = duel.request_sender.send(Request::Message(ygopro::ygopro_handlers::Request { message: ctos::RequestField.into(), extra: position }));
+			if duel.request_sender.send(Request::Message(ygopro::ygopro_handlers::Request { message: ctos::RequestField.into(), extra: position })).is_err() {
+				config.0.lock().unwrap().refreshing.remove(&slot);
+			}
 		}
 		DuelStage::Finger | DuelStage::Firstgo | DuelStage::Siding => {
 			duel.sender.send(stoc::DuelStart.into(), target.clone());
