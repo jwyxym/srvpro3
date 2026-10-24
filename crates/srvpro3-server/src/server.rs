@@ -9,6 +9,7 @@ mod transport;
 mod reconnect;
 mod host;
 mod resilience;
+pub(crate) mod lua_errors;
 mod spectate;
 mod seating;
 pub(crate) mod messages;
@@ -400,6 +401,7 @@ impl Server {
 			if watch { configuration.enable_plugin(spectate::NAME); }
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
+			configuration.enable_plugin(lua_errors::NAME);
 			configuration.enable_plugin(seating::NAME);
 			configuration.enable_plugin(messages::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));

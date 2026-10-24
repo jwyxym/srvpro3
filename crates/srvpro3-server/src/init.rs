@@ -15,7 +15,7 @@ use ygopro::managers::{
 	data_manager::{DataManager, card_reader, set_global as set_data_manager},
 	deck_manager::{DeckManager, set_global as set_deck_manager},
 };
-use ygopro_core_wrapper::{intptr_t, set_card_reader, set_message_handler, set_script_reader};
+use ygopro_core_wrapper::{set_card_reader, set_message_handler, set_script_reader};
 use ygopro_data::{
 	constants::{Attribute, Category, Linkmarkers, OT, Race, Type},
 	data::{Card, CoreCard, LFList}
@@ -64,10 +64,6 @@ extern "C" fn script_reader(script_path: *const c_char, slen: *mut c_int) -> *mu
 		}
 		Err(_) => null_mut()
 	}
-}
-
-extern "C" fn core_message_handler(_: intptr_t, _: u32) -> u32 {
-	0
 }
 
 pub fn reload_cards() -> Result<(), Error> {
@@ -129,7 +125,7 @@ pub async fn init() -> Result<(), Error> {
 	unsafe {
 		set_script_reader(Some(script_reader));
 		set_card_reader(Some(card_reader));
-		set_message_handler(Some(core_message_handler));
+		set_message_handler(Some(crate::server::lua_errors::report));
 	}
 	reload().await
 }
