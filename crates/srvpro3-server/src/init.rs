@@ -103,17 +103,14 @@ pub fn reload_cards() -> Result<(), Error> {
 		hash: 0,
 		name: "无禁限".to_owned(),
 		content: Default::default(),
-		genesys: 0,
-		glist: Default::default()
+		credit_limits: Default::default(),
+		credits: Default::default()
 	});
 	for (name, lflist) in &cards.lflists {
-		deck_manager.lflists.push(LFList {
-			hash: lflist.hash,
-			name: name.to_string(),
-			content: lflist.lflist.clone(),
-			genesys: lflist.genesys,
-			glist: lflist.glist.clone()
-		});
+		let mut converted: LFList = LFList::from_genesys(name.to_string(), lflist.lflist.clone(), lflist.genesys, lflist.glist.clone());
+		// 房间列表和客户端继续使用资源加载器计算的原禁限表哈希。
+		converted.hash = lflist.hash;
+		deck_manager.lflists.push(converted);
 	}
 	set_data_manager(data_manager);
 	set_deck_manager(deck_manager);

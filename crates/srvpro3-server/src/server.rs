@@ -408,8 +408,10 @@ impl Server {
 			configuration.enable_plugin_with_configuration(ygopro::plugin::replay::NAME, ygopro::plugin::replay::Configuration {
 				mode: ReplayMode::empty(),
 				save_path: "replays".into(),
-				file_template: "%Y-%m-%d %H-%M-%S {players}".into(),
+				file_template: "{time} {players}".into(),
+				time_format: "%Y-%m-%d %H-%M-%S".into(),
 				format: ygopro::plugin::replay::Format::YgoproForge,
+				machine: 0,
 			});
 			let host = DuelHost::new(options.host_info, configuration);
 			let finish_signal = host.get_finish_signal();

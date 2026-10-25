@@ -118,9 +118,10 @@ fn deck_count(duel: &Duel, slot: u8) -> Option<stoc::DeckCount> {
 	let opponent_slot: u8 = own_slot ^ team_size;
 	let own: &Deck = &duel.get_net(Netplayer::Player(own_slot))?.deck;
 	let opponent: &Deck = &duel.get_net(Netplayer::Player(opponent_slot))?.deck;
+	// 与新版引擎的双打开局消息一致，避免客户端将副卡组初始化到除外区。
 	Some(stoc::DeckCount {
-		mainc_s: own.main.len() as u16, sidec_s: own.side.len() as u16, extrac_s: own.extra.len() as u16,
-		mainc_o: opponent.main.len() as u16, sidec_o: opponent.side.len() as u16, extrac_o: opponent.extra.len() as u16,
+		mainc_s: own.main.len() as u16, sidec_s: if team_size == 2 { 0 } else { own.side.len() as u16 }, extrac_s: own.extra.len() as u16,
+		mainc_o: opponent.main.len() as u16, sidec_o: if team_size == 2 { 0 } else { opponent.side.len() as u16 }, extrac_o: opponent.extra.len() as u16,
 	})
 }
 
