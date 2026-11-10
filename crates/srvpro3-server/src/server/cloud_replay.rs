@@ -48,7 +48,7 @@ fn parse_forge(buffer: &[u8]) -> Result<ygopro_data::data::forge::Replay> {
 	let replay = ygopro_data::data::forge::Replay::read_le(&mut cursor).context("解析上游 .yrp3d 录像失败")?;
 	ensure!(cursor.position() == buffer.len() as u64, ".yrp3d 存在多余数据");
 	ensure!(matches!(replay.messages.first(), Some(gm::Message::SibylName(_))), ".yrp3d 缺少玩家信息");
-	ensure!(matches!(replay.messages.get(1), Some(gm::Message::Start(start)) if start.player_type & 0x10 != 0), ".yrp3d 缺少观战 START");
+	ensure!(matches!(replay.messages.get(1), Some(gm::Message::Start(start)) if start.player_type.is_observer()), ".yrp3d 缺少观战 START");
 	Ok(replay)
 }
 

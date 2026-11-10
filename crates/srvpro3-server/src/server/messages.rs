@@ -221,7 +221,7 @@ pub fn membership(record: &super::room::RoomRecord, id: u64, joined: bool) {
 	};
 	let name: String = player.name.chars().filter(|ch| !ch.is_control()).collect();
 	let action = if joined { "加入了" } else { "离开了" };
-	let frames: Vec<_> = chats(&format!("{role}「{name}」{action}房间。"), Color::Lightblue)
+	let frames: Vec<_> = chats(&format!("{role}「{name}」{action}房间。"), Color::System)
 		.into_iter().map(bytes).collect();
 	for (&other_id, other) in &record.players {
 		if other_id == id || !other.connected || !matches!(other.position, Netplayer::Player(_) | Netplayer::Observer(_)) { continue; }
@@ -249,7 +249,7 @@ pub fn command(text: &str, outgoing: &mpsc::Sender<Vec<u8>>) -> bool {
 	let message = tip(&resources).unwrap_or_else(|| {
 		if resources.config.tips.trim().is_empty() { "提示功能未启用。".into() } else { "暂无可用提示。".into() }
 	});
-	send(outgoing, &message, Color::Lightblue);
+	send(outgoing, &message, Color::System);
 	true
 }
 
@@ -273,7 +273,7 @@ impl TipSchedule {
 			let Some(message) = tip(&resources) else { continue; };
 			for player in record.players.values() {
 				if player.connected && matches!(player.position, Netplayer::Player(_) | Netplayer::Observer(_)) {
-					send(&player.outgoing, &message, Color::Lightblue);
+					send(&player.outgoing, &message, Color::System);
 				}
 			}
 		}

@@ -21,7 +21,7 @@ pub fn public_messages(recorded: &[Complex<stoc::Message>]) -> impl Iterator<Ite
 				false
 			},
 			stoc::Message::GameMessage(game) => {
-				if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 == 0) {
+				if matches!(&game.message, gm::Message::Start(start) if !start.player_type.is_observer()) {
 					restoring = true;
 				}
 				!restoring && game.message.waiting_for().is_none()
@@ -35,7 +35,7 @@ pub fn public_messages(recorded: &[Complex<stoc::Message>]) -> impl Iterator<Ite
 pub fn messages(duel: &Duel) -> impl Iterator<Item = &Complex<stoc::Message>> {
 	let recorded = &duel.sender.masked_messages;
 	let start = recorded.iter().rposition(|message| {
-		matches!(message.deref(), stoc::Message::GameMessage(game) if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 != 0))
+		matches!(message.deref(), stoc::Message::GameMessage(game) if matches!(&game.message, gm::Message::Start(start) if start.player_type.is_observer()))
 	}).unwrap_or(recorded.len());
 	public_messages(&recorded[start..])
 }

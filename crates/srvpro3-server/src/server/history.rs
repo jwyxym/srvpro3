@@ -27,7 +27,7 @@ pub fn replay_buffer(duel: &ygopro::duel::Duel, history: &HistoryRecord) -> Resu
 	let recorded = duel.sender.masked_messages.get(history.replay_start..)
 		.context("当前小局录像消息边界无效")?;
 	let start = recorded.iter().position(|message| {
-		matches!(message.try_get(), Ok(stoc::Message::GameMessage(game)) if matches!(&game.message, gm::Message::Start(start) if start.player_type & 0x10 != 0))
+		matches!(message.try_get(), Ok(stoc::Message::GameMessage(game)) if matches!(&game.message, gm::Message::Start(start) if start.player_type.is_observer()))
 	}).context("当前小局缺少观战 START，无法保存录像")?;
 	// 使用开局快照，玩家退出后不再依赖 duel.players 中是否还存在该玩家。
 	// 上游双打名称顺序为 0 / 1 / 3 / 2，对应历史记录的 A / C / D / B。

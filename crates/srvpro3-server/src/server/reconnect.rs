@@ -275,7 +275,7 @@ pub async fn run(
 					resuming: resuming.clone(),
 				};
 				if attempt.socket.outgoing.try_send(join.clone()).is_err() || attempt.socket.outgoing.try_send(kind.clone()).is_err() { continue; }
-				let _ = attempt.socket.outgoing.try_send(bytes(stoc::Chat { player: Color::Lightblue.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
+				let _ = attempt.socket.outgoing.try_send(bytes(stoc::Chat { player: Color::System.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
 				srvpro3_log::info!("房间 {room_id} 连接 {id} 开始验证重连：旧连接在线={}", live.is_some());
 				pending = Some(attempt);
 			}

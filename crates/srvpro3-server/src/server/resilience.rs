@@ -73,7 +73,7 @@ fn siding(duel: &mut Duel, config: RecordConfig, timer: &mut SideTimer) {
 	timer.stop();
 	let seconds = config.0.lock().unwrap().side_timeout_secs;
 	if seconds == 0 || duel.stage != DuelStage::Siding { return; }
-	duel.sender.send(stoc::Chat { player: Color::Lightblue.into(), msg: format!("请在 {seconds} 秒内完成换副，超时将结束房间。").into() }.into(), SendTarget::All);
+	duel.sender.send(stoc::Chat { player: Color::System.into(), msg: format!("请在 {seconds} 秒内完成换副，超时将结束房间。").into() }.into(), SendTarget::All);
 	let sender = duel.request_sender.downgrade();
 	let round = duel.duel_count;
 	timer.task = Some(tokio::spawn(async move {

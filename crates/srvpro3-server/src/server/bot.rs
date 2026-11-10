@@ -31,7 +31,7 @@ fn check_room(record: &RoomRecord) -> Result<(), Error> {
 
 fn reply(record: &Arc<Mutex<RoomRecord>>, id: u64, message: String) {
 	if let Some(player) = record.lock().unwrap().players.get(&id) {
-		let _ = player.outgoing.try_send(bytes(stoc::Chat { player: Color::Lightblue.into(), msg: message.into() }.into()));
+		let _ = player.outgoing.try_send(bytes(stoc::Chat { player: Color::System.into(), msg: message.into() }.into()));
 	}
 }
 

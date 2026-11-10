@@ -118,10 +118,11 @@ impl RoomRecord {
 			stoc::Message::GameMessage(value) => match &value.message {
 				gm::Message::Start(start) => {
 					*duel_number += 1;
-					let side = match start.player_type {
-						0 => CorePlayer::FirstAttackPlayer,
-						1 => CorePlayer::SecondAttackPlayer,
-						_ => return, // 观众不能作为 winner 对应的玩家。
+					if start.player_type.is_observer() { return; } // 观众不能作为 winner 对应的玩家。
+					let side: CorePlayer = match start.player_type.player() {
+						CorePlayer::FirstAttackPlayer => CorePlayer::FirstAttackPlayer,
+						CorePlayer::SecondAttackPlayer => CorePlayer::SecondAttackPlayer,
+						_ => return,
 					};
 					let duel = self.duels.entry(*duel_number).or_default();
 					let players = duel.duel_players.entry(side).or_default();

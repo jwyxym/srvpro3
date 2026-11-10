@@ -93,7 +93,7 @@ fn join(duel: &mut Duel, request: &mut Request, config: RecordConfig, stop: &mut
 			}
 		}
 	}
-	response.push(stoc::Chat { player: Color::Lightblue.into(), msg: "已进入比赛专用房间，双方准备后自动开始。".into() }.into());
+	response.push(stoc::Chat { player: Color::System.into(), msg: "已进入比赛专用房间，双方准备后自动开始。".into() }.into());
 	Ok(response)
 }
 
