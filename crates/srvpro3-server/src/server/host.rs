@@ -19,7 +19,7 @@ pub struct DuelHost {
 }
 
 impl DuelHost {
-	pub fn new(host_info: HostInfo, mut configuration: Configuration) -> Self {
+	pub fn new(host_info: HostInfo, mut configuration: Configuration, room_id: String) -> Self {
 		configuration.enable_plugin(NAME);
 		let (input, handle) = if host_info.mode == Mode::Tag {
 			let duel = TagDuel::new(host_info.clone(), configuration);
@@ -31,7 +31,9 @@ impl DuelHost {
 		let (finished_sender, _) = watch::channel(false);
 		let finished = finished_sender.clone();
 		tokio::spawn(async move {
-			let _ = handle.await;
+			if let Err(error) = handle.await {
+				srvpro3_log::error!("房间 {room_id} 对局引擎任务异常退出：{error}");
+			}
 			finished.send_replace(true);
 		});
 		let _ = input.send(Request::Message(ClientRequest {

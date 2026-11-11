@@ -136,7 +136,8 @@ pub async fn run(
 	let mut duel_number = 0;
 	let mut closing = None;
 	let mut udp_leave_sent = false;
-	let mut pending_observer: VecDeque<Vec<u8>> = VecDeque::new();
+	// 只暂存一条引擎消息及其附带通知；标记 UDP 离场包是否真正进入传输队列。
+	let mut pending_output: VecDeque<(Vec<u8>, bool)> = VecDeque::new();
 	let mut welcomed = false;
 	let mut joined = false;
 	loop {
@@ -144,7 +145,7 @@ pub async fn run(
 			.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
 		// 房间移除后引擎流中可能仍有观战补发消息，以流耗尽作为发送完成标志。
 		if live.is_none() {
-			pending_observer.clear();
+			pending_output.clear();
 			if deadline.is_none() {
 				if closing.is_some() || seconds == 0 || !eligible(&record.lock().unwrap(), id) { break; }
 				deadline = Instant::now().checked_add(Duration::from_secs(seconds));
@@ -152,7 +153,8 @@ pub async fn run(
 				connected(&record, &rooms, &room_id, id, false);
 			}
 		}
-		let observer_outgoing = live.as_ref().filter(|_| !pending_observer.is_empty()).map(|socket| socket.outgoing.clone());
+		let pending_outgoing: Option<mpsc::Sender<Vec<u8>>> = live.as_ref()
+			.filter(|_| !pending_output.is_empty()).map(|socket: &Live| socket.outgoing.clone());
 		let verification_deadline: Option<Instant> = pending.as_ref().map(|attempt| attempt.deadline);
 		// 先排完旧连接正在生成的快照，避免旧 FieldFinish 提前释放新连接的刷新状态。
 		let can_verify: bool = pending.is_some() && {
@@ -162,20 +164,25 @@ pub async fn run(
 			})
 		};
 		tokio::select! {
-			// 队列拥堵时暂停读取后续补发消息，仍处理退出和房间结束通知。
+			// 玩家和观众都等待发送队列空位；短暂拥堵不应被当成断线。
+			// 等待期间仍处理输入、重连和结束计时，不阻塞整个连接循环。
 			permit = async move {
-				observer_outgoing.unwrap().reserve_owned().await
-			}, if live.is_some() && !pending_observer.is_empty() => {
+				pending_outgoing.unwrap().reserve_owned().await
+			}, if live.is_some() && !pending_output.is_empty() => {
 				match permit {
 					Ok(permit) => {
-						if let Some(frame) = pending_observer.pop_front() {
+						if let Some((frame, udp_leave)) = pending_output.pop_front() {
 							permit.send(frame);
+							if udp_leave { udp_leave_sent = true; }
 						}
 					}
-					Err(_) => live = None,
+					Err(error) => {
+						srvpro3_log::warn!("房间 {room_id} 连接 {id} 发送通道已关闭：{error}");
+						live = None;
+					}
 				}
 			}
-			message = engine_output.next(), if pending_observer.is_empty() => {
+			message = engine_output.next(), if pending_output.is_empty() => {
 				let Some(mut message) = message else { break };
 				if record.lock().unwrap().tournament.is_some() {
 					// 赛事由服务器自动开局，主持人转移及重连时也不向客户端授予房主权限。
@@ -218,23 +225,12 @@ pub async fn run(
 					}
 				}
 				if let Some(socket) = live.as_ref() {
-					let observer = record.lock().unwrap().players.get(&id)
-						.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
-					if observer {
-						// 逐条排队，UDP 的 LEAVE_GAME 留到整个输出流耗尽之后发送。
-						pending_observer.push_back(message.data.to_vec());
-						pending_observer.extend(welcome);
-						continue;
-					}
-					// 慢连接也不能阻塞房间结束或保留座位计时。
-					if let Err(_) = socket.outgoing.try_send(message.data.to_vec()) {
-						live = None;
-					} else {
-						for frame in welcome { if socket.outgoing.try_send(frame).is_err() { break; } }
-						if socket.protocol == Protocol::Udp {
-							if let Some(position) = leave_position {
-								udp_leave_sent = socket.outgoing.try_send(bytes(stoc::LeaveGame { pos: position }.into())).is_ok();
-							}
+					pending_output.push_back((message.data.to_vec(), false));
+					pending_output.extend(welcome.into_iter().map(|frame: Vec<u8>| (frame, false)));
+					// 观战者的离场通知仍留到补发输出流全部耗尽之后发送。
+					if socket.protocol == Protocol::Udp && !observer {
+						if let Some(position) = leave_position {
+							pending_output.push_back((bytes(stoc::LeaveGame { pos: position }.into()), true));
 						}
 					}
 				}
@@ -318,6 +314,8 @@ pub async fn run(
 					record.refreshing.insert(slot);
 				}
 				// 保持原引擎通道和连接 ID；旧传输退出不能触发原玩家离房。
+				// 新连接将接收恢复快照，不发送旧连接尚未写出的局部消息。
+				pending_output.clear();
 				live = Some(Live { incoming: attempt.socket.incoming.take(), outgoing: attempt.socket.outgoing.clone(), protocol: attempt.socket.protocol, close: None });
 				deadline = None;
 				udp_leave_sent = false;
@@ -353,7 +351,8 @@ pub async fn run(
 					record.observe_input(id, &message);
 					if matches!(message, ctos::Message::Chat(_)) { record.update_info(&rooms, &room_id); }
 				}
-				if let Err(_) = engine_input.try_send(message) {
+				if let Err(error) = engine_input.try_send(message) {
+					srvpro3_log::warn!("房间 {room_id} 连接 {id} 提交客户端消息失败：{error}");
 					break;
 				}
 				if let Some(target) = kicked {

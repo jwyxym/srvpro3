@@ -413,7 +413,7 @@ impl Server {
 				format: ygopro::plugin::replay::Format::YgoproForge,
 				machine: 0,
 			});
-			let host = DuelHost::new(options.host_info, configuration);
+			let host: DuelHost = DuelHost::new(options.host_info, configuration, room_id.clone());
 			let finish_signal = host.get_finish_signal();
 			let finished_tx: mpsc::UnboundedSender<String> = self.finished_tx.clone();
 			let room_id_for_finish = room_id_for_finish.clone();
