@@ -13,6 +13,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 				if clients.len() >= MAX_CLIENTS { continue; }
 				let ready = ready.clone();
 				clients.spawn(async move {
+					socket.set_nodelay(true).context("设置 WebSocket TCP_NODELAY 失败")?;
 					let config = WebSocketConfig::default().max_message_size(Some(1024 * 1024)).max_frame_size(Some(1024 * 1024));
 					let socket = timeout(TIMEOUT, accept_async_with_config(socket, Some(config))).await??;
 					let (write, read) = socket.split();

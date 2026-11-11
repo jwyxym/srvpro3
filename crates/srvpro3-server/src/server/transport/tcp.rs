@@ -17,6 +17,7 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 				if clients.len() >= MAX_CLIENTS { continue; }
 				let ready = ready.clone();
 				clients.spawn(async move {
+					socket.set_nodelay(true).context("设置 TCP_NODELAY 失败")?;
 					let (read, write) = socket.into_split();
 					let input = LengthDelimitedCodec::builder().length_field_type::<u16>()
 						.little_endian().new_read(read)
