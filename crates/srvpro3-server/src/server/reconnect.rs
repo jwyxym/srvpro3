@@ -227,8 +227,7 @@ pub async fn run(
 						continue;
 					}
 					// 慢连接也不能阻塞房间结束或保留座位计时。
-					if let Err(error) = socket.outgoing.try_send(message.data.to_vec()) {
-						srvpro3_log::warn!("房间 {room_id} 连接 {id} 转发引擎消息失败：opcode={:?}，{error}", message.data.first());
+					if let Err(_) = socket.outgoing.try_send(message.data.to_vec()) {
 						live = None;
 					} else {
 						for frame in welcome { if socket.outgoing.try_send(frame).is_err() { break; } }
@@ -276,11 +275,9 @@ pub async fn run(
 				};
 				if attempt.socket.outgoing.try_send(join.clone()).is_err() || attempt.socket.outgoing.try_send(kind.clone()).is_err() { continue; }
 				let _ = attempt.socket.outgoing.try_send(bytes(stoc::Chat { player: Color::System.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
-				srvpro3_log::info!("房间 {room_id} 连接 {id} 开始验证重连：旧连接在线={}", live.is_some());
 				pending = Some(attempt);
 			}
 			_ = async { tokio::time::sleep_until(verification_deadline.unwrap()).await }, if verification_deadline.is_some() => {
-				srvpro3_log::info!("房间 {room_id} 连接 {id} 重连卡组验证超时");
 				pending = None;
 			}
 			message = async {
@@ -305,7 +302,6 @@ pub async fn run(
 				};
 				let Some((slot, engine)) = restore else {
 					let _ = pending.as_ref().unwrap().socket.outgoing.try_send(bytes(stoc::Chat { player: Color::Red.into(), msg: "重连卡组校验失败。".into() }.into()));
-					srvpro3_log::info!("房间 {room_id} 连接 {id} 重连卡组校验失败，保留旧座位");
 					pending = None;
 					continue;
 				};
@@ -327,7 +323,6 @@ pub async fn run(
 				udp_leave_sent = false;
 				connected(&record, &rooms, &room_id, id, true);
 				if engine.send(Request::Command { name: "srvpro_resume", arguments: Some(Box::new(slot)) }).is_err() { break; }
-				srvpro3_log::info!("房间 {room_id} 连接 {id} 重连成功，已接管原座位 Player({slot})");
 			}
 			frame = async { live.as_mut().unwrap().incoming.as_mut().unwrap().recv().await }, if live.is_some() => {
 				let Some(frame) = frame else { live = None; continue; };
@@ -358,8 +353,7 @@ pub async fn run(
 					record.observe_input(id, &message);
 					if matches!(message, ctos::Message::Chat(_)) { record.update_info(&rooms, &room_id); }
 				}
-				if let Err(error) = engine_input.try_send(message) {
-					srvpro3_log::warn!("房间 {room_id} 连接 {id} 转发客户端消息失败：{error}");
+				if let Err(_) = engine_input.try_send(message) {
 					break;
 				}
 				if let Some(target) = kicked {

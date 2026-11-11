@@ -7,8 +7,8 @@ pub async fn listen(listener: TcpListener, ready: mpsc::Sender<Connection>) -> R
 		tokio::select! {
 			client = clients.join_next(), if !clients.is_empty() => {
 				match client {
-					Some(Ok(Err(error))) => warn!("TCP 连接异常：{error:#}"),
-					Some(Err(error)) => error!("TCP 连接任务异常：{error}"),
+					Some(Ok(Err(_))) => (),
+					Some(Err(_)) => (),
 					_ => {}
 				}
 			}
