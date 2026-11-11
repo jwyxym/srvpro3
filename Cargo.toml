@@ -55,7 +55,7 @@ ygopro-data = { version = "0.1.7", default-features = false }
 ygopro-core-wrapper = { version = "0.2.0", default-features = false, features = ["koishi", "lua54"] }
 ygopro-handler = "0.1.4"
 ygopro-derive = "0.1.3"
-ygopro_cdb_reader = "0.1.6"
+ygopro_cdb_reader = "0.1.7"
 ygopro_lflist_reader = "0.1.0"
 
 srvpro3-cards = { path = "./crates/srvpro3-cards" }
