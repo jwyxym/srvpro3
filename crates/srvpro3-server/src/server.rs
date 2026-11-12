@@ -9,6 +9,7 @@ mod transport;
 mod reconnect;
 mod host;
 mod resilience;
+mod tag_refresh;
 pub(crate) mod lua_errors;
 mod spectate;
 mod seating;
@@ -35,7 +36,7 @@ use tokio::{
 use host::DuelHost;
 use ygopro_data::{
 	data::ReplayMode,
-	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer, DuelStage},
+	constants::{CorePlayer, ErrorMessage, JoinError, Netplayer, DuelStage, Mode},
 	message::{ctos, stoc, gm}
 };
 
@@ -401,6 +402,9 @@ impl Server {
 			if watch { configuration.enable_plugin(spectate::NAME); }
 			if admission.is_some() { configuration.enable_plugin(tournament::plugin::NAME); }
 			configuration.enable_plugin(resilience::NAME);
+			if options.host_info.mode == Mode::Tag {
+				configuration.enable_plugin(tag_refresh::NAME);
+			}
 			configuration.enable_plugin(lua_errors::NAME);
 			configuration.enable_plugin(seating::NAME);
 			configuration.enable_plugin(messages::NAME);

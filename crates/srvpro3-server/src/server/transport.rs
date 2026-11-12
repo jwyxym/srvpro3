@@ -161,7 +161,9 @@ async fn session(mut input: Input, mut output: Output, ready: mpsc::Sender<Conne
 		Ok(())
 	}.await;
 	drop(incoming_tx);
-	let _ = timeout(TIMEOUT, output.close()).await;
+	// Sink 发送失败或超时后不能继续轮询；sink_map_err 的错误映射只允许消费一次。
+	// 异常退出直接释放传输，正常退出才完成 close 握手。
+	if result.is_ok() { let _ = timeout(TIMEOUT, output.close()).await; }
 	result
 }
 
