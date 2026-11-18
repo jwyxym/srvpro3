@@ -66,18 +66,28 @@ extern "C" fn script_reader(script_path: *const c_char, slen: *mut c_int) -> *mu
 	}
 }
 
+fn normalize_alias(code: u32, alias: u32) -> (u32, u32) {
+	if alias != 0 && code.abs_diff(alias) >= 20 {
+		(0, alias)
+	} else {
+		(alias, 0)
+	}
+}
+
 pub fn reload_cards() -> Result<(), Error> {
 	let mut data_manager: DataManager = DataManager::new();
 	let cards: Arc<CardsSnapshot> = srvpro3_cards::get()?;
 	for card in cards.cards.values() {
+		let card_type: Type = Type::from_bits_retain(card.card_type);
+		let (alias, rule_code): (u32, u32) = normalize_alias(card.code, card.alias);
 		data_manager.cards.insert(
 			card.code,
 			Card {
 				card: CoreCard {
 					code: card.code,
-					alias: card.alias,
+					alias,
 					setcode: card.setcode,
-					card_type: Type::from_bits_retain(card.card_type),
+					card_type,
 					level: card.level,
 					attribute: Attribute::from_bits_retain(card.attribute),
 					race: Race::from_bits_retain(card.race),
@@ -86,7 +96,7 @@ pub fn reload_cards() -> Result<(), Error> {
 					left_scale: card.lscale,
 					right_scale: card.rscale,
 					link_marker: Linkmarkers::from_bits_retain(card.link_marker),
-					rule_code: 0
+					rule_code
 				},
 				ot: OT::from_bits_retain(card.ot),
 				category: Category::from_bits_retain(card.category),
