@@ -280,6 +280,11 @@ impl TipSchedule {
 	}
 }
 
+/// Lua 主动发送文本不依赖自动召唤词文件配置。
+pub(super) fn dialogue_text(duel: &mut Duel, text: &str) {
+	for message in chats(text, Color::Pink) { duel.sender.send(message, SendTarget::All); }
+}
+
 fn dialogue(duel: &mut Duel, code: u32) {
 	let resources = RESOURCES.read().clone();
 	if resources.config.dialogues.iter().all(|path| path.trim().is_empty()) { return; }

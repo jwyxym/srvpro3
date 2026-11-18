@@ -11,6 +11,7 @@ mod host;
 mod resilience;
 mod tag_refresh;
 pub(crate) mod lua_errors;
+mod lua_dialogue;
 mod spectate;
 mod seating;
 pub(crate) mod messages;
@@ -406,6 +407,7 @@ impl Server {
 				configuration.enable_plugin(tag_refresh::NAME);
 			}
 			configuration.enable_plugin(lua_errors::NAME);
+			configuration.enable_plugin(lua_dialogue::NAME);
 			configuration.enable_plugin(seating::NAME);
 			configuration.enable_plugin(messages::NAME);
 			configuration.enable_plugin_with_configuration(recorder::NAME, recorder::RecordConfig(record.clone()));

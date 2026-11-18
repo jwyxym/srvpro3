@@ -6,8 +6,10 @@ mod cards;
 mod windbot;
 mod tournament;
 mod replay_storage;
+mod lua_api;
 
 pub use server::Server;
+pub use lua_api::LuaApi;
 
 pub use db::{Database, DB};
 pub use redis::Redis;
@@ -24,6 +26,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
 	#[serde(alias = "servers")]
 	pub server: Server,
+	pub lua_api: LuaApi,
 	pub db: Database,
 	#[serde(alias = "api")]
 	pub http_api: HttpApi,
