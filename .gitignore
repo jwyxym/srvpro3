@@ -6,3 +6,4 @@
 /config.toml
 *.db
 default/dialogues.json
+/scripts

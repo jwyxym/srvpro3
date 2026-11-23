@@ -48,7 +48,8 @@ impl RoomRecord {
 			info.spectators = 0;
 			info.connections = 0;
 			for (&id, player) in &self.players {
-				if !player.connected { continue; }
+				// 与 srvpro2 一致：保留座位的重连等待期内仍然把玩家列在房间里。
+				if !player.connected && !player.reserved { continue; }
 				info.connections += 1;
 				match player.position {
 					Netplayer::Player(slot) => {
@@ -104,6 +105,11 @@ impl RoomRecord {
 	}
 
 	pub fn observe_output(&mut self, id: u64, duel_number: &mut u32, message: &stoc::Message) {
+		// 双打开局由引擎的前置处理器完成，通用的开局后置处理器会被跳过，
+		// 用开局消息补上记录阶段，否则揭牌阶段掉线会被当成仍停留在等待房间。
+		if matches!(message, stoc::Message::DuelStart(_)) && self.stage == DuelStage::Begin {
+			self.stage = DuelStage::Finger;
+		}
 		match message {
 			stoc::Message::TypeChange(value) => {
 				if let Some(player) = self.players.get_mut(&id) {
@@ -118,6 +124,8 @@ impl RoomRecord {
 			stoc::Message::GameMessage(value) => match &value.message {
 				gm::Message::Start(start) => {
 					*duel_number += 1;
+					// 换副后重开一局也要离开换副阶段，否则记录会一直停在 Siding。
+					self.stage = DuelStage::Dueling;
 					if start.player_type.is_observer() { return; } // 观众不能作为 winner 对应的玩家。
 					let side: CorePlayer = match start.player_type.player() {
 						CorePlayer::FirstAttackPlayer => CorePlayer::FirstAttackPlayer,

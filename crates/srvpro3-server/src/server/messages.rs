@@ -211,8 +211,19 @@ pub fn welcome() -> Vec<Vec<u8>> {
 	chats(&RESOURCES.read().config.welcome, Color::Green).into_iter().map(bytes).collect()
 }
 
-/// 通知已入房的其他连接，不把成员变动作为玩家聊天转交引擎。
-pub fn membership(record: &super::room::RoomRecord, id: u64, joined: bool) {
+/// 向房间内其他已连接的玩家发一条系统提示，不经过引擎。
+pub fn notice(record: &super::room::RoomRecord, id: u64, text: &str, color: Color) {
+	let frames: Vec<Vec<u8>> = chats(text, color).into_iter().map(bytes).collect();
+	for (&other_id, other) in &record.players {
+		if other_id == id || !other.connected || !matches!(other.position, Netplayer::Player(_) | Netplayer::Observer(_)) { continue; }
+		for frame in &frames {
+			if other.outgoing.try_send(frame.clone()).is_err() { break; }
+		}
+	}
+}
+
+/// 以玩家身份发一条房间提示，用于加入、离开、断线和重连。
+pub fn notice_player(record: &super::room::RoomRecord, id: u64, suffix: &str, color: Color) {
 	let Some(player) = record.players.get(&id) else { return };
 	let role = match player.position {
 		Netplayer::Player(_) => "玩家",
@@ -220,15 +231,13 @@ pub fn membership(record: &super::room::RoomRecord, id: u64, joined: bool) {
 		_ => return,
 	};
 	let name: String = player.name.chars().filter(|ch| !ch.is_control()).collect();
-	let action = if joined { "加入了" } else { "离开了" };
-	let frames: Vec<_> = chats(&format!("{role}「{name}」{action}房间。"), Color::System)
-		.into_iter().map(bytes).collect();
-	for (&other_id, other) in &record.players {
-		if other_id == id || !other.connected || !matches!(other.position, Netplayer::Player(_) | Netplayer::Observer(_)) { continue; }
-		for frame in &frames {
-			if other.outgoing.try_send(frame.clone()).is_err() { break; }
-		}
-	}
+	notice(record, id, &format!("{role}「{name}」{suffix}"), color);
+}
+
+/// 通知已入房的其他连接，不把成员变动作为玩家聊天转交引擎。
+pub fn membership(record: &super::room::RoomRecord, id: u64, joined: bool) {
+	let suffix: &str = if joined { "加入了房间。" } else { "离开了房间。" };
+	notice_player(record, id, suffix, Color::System);
 }
 
 fn tip(resources: &Resources) -> Option<String> {

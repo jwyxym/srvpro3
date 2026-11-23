@@ -2,7 +2,7 @@ use std::{collections::VecDeque, net::IpAddr, sync::{Arc, Mutex, MutexGuard, ato
 use futures::{Stream, StreamExt};
 use tokio::{sync::{mpsc, oneshot, watch}, time::Instant};
 use ygopro::duel::Request;
-use ygopro_data::{complex::Complex, constants::{Color, DuelStage, Netplayer}, data::Deck, message::{ctos, stoc, gm}};
+use ygopro_data::{complex::Complex, constants::{Color, DuelStage, ErrorMessage, Netplayer, PlayerChange, PlayerChangeState}, data::{Deck, DeckError}, message::{gm::GameMessage as _, ctos, stoc, gm}};
 use super::{decode::decode, player::PlayerRecord, room::RoomRecord, transport::{Connection, Protocol}};
 use crate::rooms::RoomList;
 
@@ -43,9 +43,13 @@ pub fn same_deck(left: &Deck, right: &Deck) -> bool {
 	sorted(left) == sorted(right)
 }
 
-fn connected(record: &Arc<Mutex<RoomRecord>>, rooms: &RoomList, room: &str, id: u64, value: bool) {
+fn connected(record: &Arc<Mutex<RoomRecord>>, rooms: &RoomList, room: &str, id: u64, value: bool, reserved: bool) {
 	let mut record = record.lock().unwrap();
-	if let Some(player) = record.players.get_mut(&id) { player.connected = value; }
+	if let Some(player) = record.players.get_mut(&id) {
+		player.connected = value;
+		// 等待重连期间座位仍然占着，房间列表要继续列出这名玩家。
+		player.reserved = reserved;
+	}
 	record.update_info(rooms, room);
 }
 
@@ -140,6 +144,11 @@ pub async fn run(
 	let mut pending_output: VecDeque<(Vec<u8>, bool)> = VecDeque::new();
 	let mut welcomed = false;
 	let mut joined = false;
+	// 是否已经向房间广播过断线提示，用于决定重连成功后再广播一条回来提示。
+	let mut announced = false;
+	// 与 srvpro2 一致：重连快照结束后给非应答方补 MSG_WAITING，给应答方补发最后一条提示。
+	let mut prompted = false;
+	let mut last_hint: Option<Vec<u8>> = None;
 	loop {
 		let observer = record.lock().unwrap().players.get(&id)
 			.is_some_and(|player| matches!(player.position, Netplayer::Observer(_)));
@@ -150,7 +159,13 @@ pub async fn run(
 				if closing.is_some() || seconds == 0 || !eligible(&record.lock().unwrap(), id) { break; }
 				deadline = Instant::now().checked_add(Duration::from_secs(seconds));
 				if deadline.is_none() { break; }
-				connected(&record, &rooms, &room_id, id, false);
+				connected(&record, &rooms, &room_id, id, false, true);
+				// 与 srvpro2 一致：保留座位的等待期内先告诉房间有人断线，重连成功后再提示回来。
+				{
+					let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
+					super::messages::notice_player(&record, id, "断开了连接。", Color::Babyblue);
+				}
+				announced = true;
 			}
 		}
 		let pending_outgoing: Option<mpsc::Sender<Vec<u8>>> = live.as_ref()
@@ -192,6 +207,7 @@ pub async fn run(
 				}
 				let mut leave_position = None;
 				let mut welcome = Vec::new();
+				let mut restoring_field = false;
 				if let Ok(value) = message.try_get() {
 					if !welcomed && matches!(value, stoc::Message::JoinGame(_)) {
 						welcomed = true;
@@ -202,6 +218,11 @@ pub async fn run(
 						stoc::Message::TypeChange(_) => type_packet = Some(message.data.to_vec()),
 						_ => {}
 					}
+					if let stoc::Message::GameMessage(value) = &value {
+						// 玩家收到需要响应的事件时记住状态，断线重连后据此补发等待或提示。
+						if value.message.waiting_for().is_some() { prompted = true; }
+						if matches!(&value.message, gm::Message::Hint(_)) { last_hint = Some(message.data.to_vec()); }
+					}
 					let mut record = record.lock().unwrap();
 					let slot = record.players.get(&id).and_then(|player| match player.position { Netplayer::Player(slot) => Some(slot), _ => None });
 					let restoring = slot.is_some_and(|slot| record.refreshing.contains(&slot));
@@ -210,6 +231,7 @@ pub async fn run(
 						record.observe_output(id, &mut duel_number, value);
 					}
 					if matches!(value, stoc::Message::FieldFinish(_)) {
+						restoring_field = restoring;
 						if let Some(slot) = slot { record.refreshing.remove(&slot); }
 					}
 					if matches!(value, stoc::Message::DuelEnd(_)) {
@@ -227,6 +249,14 @@ pub async fn run(
 				if let Some(socket) = live.as_ref() {
 					pending_output.push_back((message.data.to_vec(), false));
 					pending_output.extend(welcome.into_iter().map(|frame: Vec<u8>| (frame, false)));
+					// 快照结束后：应答方补最后一条提示，另一方补“对方思考中”，与 srvpro2 一致。
+					if restoring_field {
+						if prompted {
+							if let Some(hint) = &last_hint { pending_output.push_back((hint.clone(), false)); }
+						} else {
+							pending_output.push_back((bytes(stoc::Message::from(gm::Waiting)), false));
+						}
+					}
 					// 观战者的离场通知仍留到补发输出流全部耗尽之后发送。
 					if socket.protocol == Protocol::Udp && !observer {
 						if let Some(position) = leave_position {
@@ -252,7 +282,7 @@ pub async fn run(
 			}
 			candidate = resumes.recv() => {
 				let Some(candidate) = candidate else { break };
-				if closing.is_some() || pending.is_some() || !eligible(&record.lock().unwrap(), id) {
+				if closing.is_some() || !eligible(&record.lock().unwrap(), id) {
 					super::Server::reject_connection(candidate);
 					if pending.is_none() { resuming.store(false, Ordering::Release); }
 					continue;
@@ -271,6 +301,10 @@ pub async fn run(
 				};
 				if attempt.socket.outgoing.try_send(join.clone()).is_err() || attempt.socket.outgoing.try_send(kind.clone()).is_err() { continue; }
 				let _ = attempt.socket.outgoing.try_send(bytes(stoc::Chat { player: Color::System.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
+				// 与 srvpro2 一致：新连接顶替尚未完成的验证，旧的待验证连接直接关闭。
+				let replaced: bool = pending.take().is_some();
+				// 旧 Pending 的 Drop 会把标志置回 false，这里在它之后重新占住。
+				if replaced { resuming.store(true, Ordering::Release); }
 				pending = Some(attempt);
 			}
 			_ = async { tokio::time::sleep_until(verification_deadline.unwrap()).await }, if verification_deadline.is_some() => {
@@ -286,21 +320,34 @@ pub async fn run(
 					if matches!(message, ctos::Message::LeaveGame(_)) { pending = None; }
 					continue;
 				};
-				let restore: Option<(u8, mpsc::UnboundedSender<Request>)> = {
+				let (restore, mismatched): (Option<(u8, mpsc::UnboundedSender<Request>)>, Option<u8>) = {
 					let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
-					if !eligible(&record, id) { None } else {
-						record.players.get(&id).and_then(|player| {
-							let Netplayer::Player(slot) = player.position else { return None };
-							if !player.reconnect_deck.as_ref().is_some_and(|deck| same_deck(deck, &update.deck)) { return None; }
-							record.engine.as_ref()?.upgrade().map(|engine| (slot, engine))
-						})
+					if !eligible(&record, id) { (None, None) } else {
+						let slot: Option<u8> = record.players.get(&id).and_then(|player| match player.position {
+							Netplayer::Player(slot) => Some(slot),
+							_ => None,
+						});
+						let matched: bool = record.players.get(&id).is_some_and(|player| {
+							player.reconnect_deck.as_ref().is_some_and(|deck| same_deck(deck, &update.deck))
+						});
+						match slot {
+							Some(slot) if !matched => (None, Some(slot)),
+							Some(slot) => (record.engine.as_ref().and_then(|engine| engine.upgrade()).map(|engine| (slot, engine)), None),
+							None => (None, None),
+						}
 					}
 				};
-				let Some((slot, engine)) = restore else {
-					let _ = pending.as_ref().unwrap().socket.outgoing.try_send(bytes(stoc::Chat { player: Color::Red.into(), msg: "重连卡组校验失败。".into() }.into()));
-					pending = None;
+				if let Some(slot) = mismatched {
+					// 与 srvpro2 一致：卡组不符时不踢下线，让客户端重新选择本局使用的卡组。
+					let outgoing: &mpsc::Sender<Vec<u8>> = &pending.as_ref().unwrap().socket.outgoing;
+					let _ = outgoing.try_send(bytes(stoc::Chat { player: Color::Red.into(), msg: "请选择你在本局决斗中使用的卡组。".into() }.into()));
+					let _ = outgoing.try_send(bytes(stoc::HsPlayerChange {
+						status: PlayerChange::new().with_player(Netplayer::Player(slot)).with_state(PlayerChangeState::Notready),
+					}.into()));
+					let _ = outgoing.try_send(bytes(stoc::ErrorMessage { err: ErrorMessage::DeckError(DeckError::new()) }.into()));
 					continue;
-				};
+				}
+				let Some((slot, engine)) = restore else { pending = None; continue; };
 				let mut attempt: Pending = pending.take().unwrap();
 				{
 					let mut record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
@@ -319,14 +366,29 @@ pub async fn run(
 				live = Some(Live { incoming: attempt.socket.incoming.take(), outgoing: attempt.socket.outgoing.clone(), protocol: attempt.socket.protocol, close: None });
 				deadline = None;
 				udp_leave_sent = false;
-				connected(&record, &rooms, &room_id, id, true);
+				connected(&record, &rooms, &room_id, id, true, false);
+				if announced {
+					let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
+					super::messages::notice_player(&record, id, "重新连接了。", Color::Babyblue);
+					announced = false;
+				}
 				if engine.send(Request::Command { name: "srvpro_resume", arguments: Some(Box::new(slot)) }).is_err() { break; }
 			}
 			frame = async { live.as_mut().unwrap().incoming.as_mut().unwrap().recv().await }, if live.is_some() => {
 				let Some(frame) = frame else { live = None; continue; };
 				let Some(message) = decode(&frame) else { live = None; continue; };
+				// 已经应答，之前记下的提示和等待状态不再有效，避免下次重连补发过期内容。
+				if matches!(message, ctos::Message::Response(_)) { prompted = false; last_hint = None; }
+				// 与 srvpro2 一致：对局中的离开请求按断线处理并保留座位，不直接判负结束房间。
+				// 否则一条 LEAVE_GAME 就会让引擎给对手判胜，其他玩家也被一并断开。
+				if matches!(message, ctos::Message::LeaveGame(_)) {
+					if eligible(&record.lock().unwrap(), id) {
+						srvpro3_log::warn!("房间 {room_id} 连接 {id} 在对局中请求离开，按断线处理并保留座位");
+					}
+					live = None;
+					continue;
+				}
 				let socket = live.as_mut().unwrap();
-				if matches!(message, ctos::Message::LeaveGame(_)) { break; }
 				// 引擎已结束时不再转发观战输入，避免发送失败截断剩余输出。
 				if observer && (closing.is_some() || !rooms.read().contains_key(&room_id)) { continue; }
 				if record.lock().unwrap().tournament.is_some() && super::tournament::blocked_input(&message) {
@@ -363,6 +425,13 @@ pub async fn run(
 	}
 	drop(pending);
 	resuming.store(true, Ordering::Release);
+	// 对局中途释放座位会让引擎判对手胜利并结束整个房间，留一条线索便于排查。
+	{
+		let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
+		if matches!(record.stage, DuelStage::Finger | DuelStage::Firstgo | DuelStage::Dueling | DuelStage::Siding) {
+			srvpro3_log::warn!("房间 {room_id} 连接 {id} 在对局中结束连接任务（阶段 {:?}），座位即将释放", record.stage);
+		}
+	}
 	// 保留座位期间不会走到这里；房间整体结束时不逐个刷离房提示。
 	if joined && !*finished.borrow() && rooms.read().contains_key(&room_id) {
 		super::messages::membership(&record.lock().unwrap(), id, false);
@@ -370,7 +439,7 @@ pub async fn run(
 	// 先结束引擎输入并更新房间列表，不让 UDP 传输清理延迟玩家离房。
 	// DuelHost 在输入流结束时发送 LeaveGame，移除座位并销毁空房间。
 	drop(engine_input);
-	connected(&record, &rooms, &room_id, id, false);
+	connected(&record, &rooms, &room_id, id, false, false);
 	// 引擎结束不等于传输连接结束：历史记录仍可能持有 outgoing，必须主动关闭。
 	let player = {
 		let mut record = record.lock().unwrap();

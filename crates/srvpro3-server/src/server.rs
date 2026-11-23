@@ -310,13 +310,11 @@ impl Server {
 		if !candidates.is_empty() {
 			if candidates.len() == 1 {
 				let handle: &reconnect::Handle = candidates[0];
-				if !handle.resuming.swap(true, std::sync::atomic::Ordering::AcqRel) {
-					if let Err(error) = handle.sender.try_send(connection) {
-						handle.resuming.store(false, std::sync::atomic::Ordering::Release);
-						Self::reject_connection(error.into_inner());
-					}
-				} else {
-					Self::reject_connection(connection);
+				let busy: bool = handle.resuming.swap(true, std::sync::atomic::Ordering::AcqRel);
+				// 与 srvpro2 一致：已有待验证连接时也接受新连接，由房间任务用新连接顶替。
+				if let Err(error) = handle.sender.try_send(connection) {
+					if !busy { handle.resuming.store(false, std::sync::atomic::Ordering::Release); }
+					Self::reject_connection(error.into_inner());
 				}
 			} else {
 				warn!("同 IP、名字和房间存在多个玩家座位，拒绝不明确的重连");
@@ -467,6 +465,7 @@ impl Server {
 			position: Netplayer::Unknown,
 			is_host: false,
 			connected: true,
+			reserved: false,
 			protocol: connection.protocol,
 			outgoing: connection.outgoing.clone(),
 			close: connection.close.take(),

@@ -10,6 +10,8 @@ pub struct PlayerRecord {
 	pub position: Netplayer,
 	pub is_host: bool,
 	pub connected: bool,
+	/// 断线后仍在重连等待期内，座位和房间列表都按 srvpro2 的做法保留。
+	pub reserved: bool,
 	pub protocol: Protocol,
 	pub outgoing: mpsc::Sender<Vec<u8>>,
 	pub close: Option<oneshot::Sender<()>>,
