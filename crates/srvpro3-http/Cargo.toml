@@ -20,9 +20,13 @@ base64.workspace = true
 rsa.workspace = true
 sha2.workspace = true
 aes-gcm.workspace = true
+ygopro_cdb_reader.workspace = true
+chrono.workspace = true
 
 srvpro3-log.workspace = true
 srvpro3-config.workspace = true
 srvpro3-database.workspace = true
 srvpro3-server.workspace = true
 srvpro3-cards.workspace = true
+srvpro3-plugin.workspace = true
+srvpro3-deck.workspace = true

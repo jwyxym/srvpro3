@@ -21,7 +21,7 @@ pub async fn init(db: &DatabaseConnection) -> Result<(), DbErr> {
 	};
 	let columns = db.query_all_raw(Statement::from_string(backend, sql)).await?
 		.into_iter().map(|row| row.try_get::<String>("", field)).collect::<Result<Vec<_>, _>>()?;
-	for name in ["player_c", "player_d", "deck_c", "deck_d"] {
+	for name in ["player_c", "player_d", "deck_c", "deck_d", "room_type"] {
 		if columns.iter().any(|column| column == name) { continue; }
 		let mut column = ColumnDef::new(Alias::new(name));
 		if name.starts_with("deck_") { column.text(); } else { column.string(); }

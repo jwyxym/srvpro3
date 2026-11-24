@@ -6,7 +6,7 @@ use ygopro::{
 	tag_duel::{TagDuel, TeamIndex, ygopro_handlers::{HandlerEx as TagHandlerEx, TAG_DUEL_YGOPRO_HANDLERS_EX}},
 	ygopro_handlers::{Handler, HandlerEx as GeneralHandlerEx, Request, YGOPRO_HANDLERS, YGOPRO_HANDLERS_EX},
 };
-use ygopro_data::{constants::{CorePlayer, Netplayer}, message::ctos};
+use ygopro_data::{constants::{CorePlayer, Mode, Netplayer}, message::ctos};
 use ygopro_derive::{after, before, register_to};
 use ygopro_handler::{Bundle, FromRequest, extract::ContainsMap};
 use super::{RoomRecord, history::HistoryRecord};
@@ -31,6 +31,7 @@ fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 		deck_d: None,
 		winner_id: None,
 		room_id: record.room_id.clone(),
+		room_type: if duel.host_info.mode == Mode::Match { "Match" } else { "Single" }.to_owned(),
 		first_attack_slot: duel.first_attack_player.unwrap_or(PlayerIndex(0)).0,
 		replay_start: duel.sender.masked_messages.len(),
 	});
@@ -59,7 +60,7 @@ fn on_tag_start(duel: &mut TagDuel, config: RecordConfig) {
 		deck_a: a.deck.to_string(), deck_b: b.deck.to_string(),
 		player_c: Some(a_tag.name.to_string()), player_d: Some(b_tag.name.to_string()),
 		deck_c: Some(a_tag.deck.to_string()), deck_d: Some(b_tag.deck.to_string()),
-		winner_id: None, room_id: record.room_id.clone(),
+		winner_id: None, room_id: record.room_id.clone(), room_type: "Tag".to_owned(),
 		// 历史结果按 A/B 队存储，与单打的 0/1 结果兼容。
 		first_attack_slot: duel.first_attack_team.unwrap_or(TeamIndex::Team1).leader().0 / 2,
 		replay_start: duel.sender.masked_messages.len(),

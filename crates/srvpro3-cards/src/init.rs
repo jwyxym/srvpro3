@@ -16,6 +16,8 @@ use srvpro3_log::*;
 
 pub struct CardsSnapshot {
 	pub cards: HashMap<u32, Card>,
+	/// 与最终生效的卡片数据同步更新，保留 expansions 目录及资源文件名。
+	pub sources: HashMap<u32, String>,
 	pub lflists: IndexMap<String, LFList>,
 	pub packs: Vec<ypk::YPK>,
 }
@@ -24,6 +26,7 @@ impl CardsSnapshot {
 	fn new() -> Self {
 		Self {
 			cards: HashMap::new(),
+			sources: HashMap::new(),
 			lflists: IndexMap::new(),
 			packs: Vec::new(),
 		}
@@ -82,6 +85,7 @@ pub async fn init() -> Result<(), Error> {
 								if snapshot.cards.contains_key(&card.code) {
 									continue;
 								}
+								snapshot.sources.insert(card.code, i.path().to_string_lossy().into_owned());
 								snapshot.cards.insert(card.code, card);
 							}
 						}

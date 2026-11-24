@@ -1,0 +1,15 @@
+[package]
+name = "srvpro3-plugin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+srvpro3-deck.workspace = true
+srvpro3-cards.workspace = true
+ygopro_cdb_reader.workspace = true
+wasmtime = { version = "50.0.0", default-features = false, features = ["std", "runtime", "cranelift", "anyhow", "component-model", "gc-drc"] }
+wasmtime-wasi = { version = "50.0.0", default-features = false, features = ["p1", "p2"] }

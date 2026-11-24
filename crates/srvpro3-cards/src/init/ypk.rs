@@ -23,6 +23,7 @@ impl YPK {
 }
 
 pub fn read<P: AsRef<Path>>(snapshot: &mut CardsSnapshot, i: P) -> Result<(), Error> {
+	let source: String = i.as_ref().to_string_lossy().into_owned();
 	let file: File = File::open(i)?;
 	let mut archive: ZipArchive<File> = ZipArchive::new(file)?;
 	let len: usize = archive.len();
@@ -43,7 +44,10 @@ pub fn read<P: AsRef<Path>>(snapshot: &mut CardsSnapshot, i: P) -> Result<(), Er
 				let mut content: Vec<u8> = Vec::new();
 				if file.read_to_end(&mut content).is_ok() {
 					if let Ok(cards) = cdb::read_buffer(content) {
-						for card in cards { snapshot.cards.insert(card.code, card); }
+						for card in cards {
+							snapshot.sources.insert(card.code, source.clone());
+							snapshot.cards.insert(card.code, card);
+						}
 					}
 				}
 			}

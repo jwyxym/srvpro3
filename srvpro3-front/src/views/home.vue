@@ -38,6 +38,9 @@
 		items : [
 			{ key : '/home', label : '主页' },
 			{ key : '/home/room', label : '房间列表' },
+			{ key : '/home/cards', label : '卡片搜索' },
+			{ key : '/home/decks', label : '卡组统计' },
+			{ key : '/home/wasm', label : 'WASM 测试' },
 			{ key : '/hoom/history', label : '历史记录' },
 			{ key : '/home/config', label : '服务器配置' },
 		],

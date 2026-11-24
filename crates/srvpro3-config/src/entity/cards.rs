@@ -5,6 +5,12 @@ use std::collections::BTreeMap;
 #[serde(default)]
 pub struct Cards {
 	pub expansions: Vec<String>,
+	/// 卡图地址模板，{code} 替换为卡号；留空不显示卡图。
+	pub image_url: String,
+	/// 图床匹配顺序：资源文件路径、expansions 目录、文件名、全局图床。
+	pub pack_image_urls: BTreeMap<String, String>,
+	/// 服务端卡组分类 WASM 文件路径；留空禁用分类。
+	pub wasm: String,
 	pub ypk: bool,
 	/// 自动重载间隔，单位秒；小于等于 0 表示禁用。
 	pub reload: i32,
@@ -16,6 +22,9 @@ impl Default for Cards {
 	fn default() -> Self {
 		Self {
 			expansions: Vec::new(),
+			image_url: String::new(),
+			pack_image_urls: BTreeMap::new(),
+			wasm: String::new(),
 			ypk: true,
 			reload: 1800,
 			excode: BTreeMap::from([

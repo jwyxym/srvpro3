@@ -59,6 +59,7 @@ ygopro_cdb_reader = "0.1.7"
 ygopro_lflist_reader = "0.1.0"
 
 srvpro3-cards = { path = "./crates/srvpro3-cards" }
+srvpro3-plugin = { path = "./crates/srvpro3-plugin" }
 srvpro3-config = { path = "./crates/srvpro3-config" }
 srvpro3-database = { path = "./crates/srvpro3-database" }
 srvpro3-deck = { path = "./crates/srvpro3-deck" }
@@ -72,6 +73,7 @@ srvpro3-windbot = { path = "./crates/srvpro3-windbot" }
 resolver = "2"
 members = [
 	"crates/srvpro3-cards",
+	"crates/srvpro3-plugin",
 	"crates/srvpro3-config",
 	"crates/srvpro3-database",
 	"crates/srvpro3-deck",

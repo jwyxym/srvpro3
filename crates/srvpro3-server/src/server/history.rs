@@ -17,6 +17,7 @@ pub struct HistoryRecord {
 	pub deck_d: Option<String>,
 	pub winner_id: Option<u8>,
 	pub room_id: String,
+	pub room_type: String,
 	pub first_attack_slot: u8,
 	/// 本局真正开始前的消息边界，只在内存中使用，不写入数据库。
 	pub replay_start: usize,
@@ -80,6 +81,7 @@ pub async fn persist(record: HistoryRecord, buffer: Option<Vec<u8>>) -> Result<(
 		&db, record.player_a, record.player_b, record.deck_a, record.deck_b,
 		winner, record.room_id, replay,
 		record.player_c, record.player_d, record.deck_c, record.deck_d,
+		Some(record.room_type),
 	).await.context("保存小局历史记录失败")?;
 	Ok(())
 }

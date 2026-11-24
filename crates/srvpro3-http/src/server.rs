@@ -1,5 +1,6 @@
 mod auth;
 mod cards;
+mod card_usage;
 mod config;
 mod history;
 mod host;
@@ -8,6 +9,7 @@ mod reload;
 mod room;
 mod ws;
 mod webui;
+mod wasm;
 
 use std::sync::LazyLock;
 use anyhow::Error;
@@ -63,6 +65,10 @@ pub async fn reload() -> Result<(), Error> {
 		.route("/ws", get(ws::connect))
 		.route("/host", get(host::get))
 		.route("/cards", get(cards::get))
+		.route("/cards/search", get(cards::search))
+		.route("/cards/usage", get(card_usage::get))
+		.route("/decks/distribution", get(card_usage::distribution))
+		.route("/wasm/test", post(wasm::test))
 		.route("/reload", post(reload::reload))
 		.route("/config", get(config::read).put(config::save))
 		.route("/room", get(room::list))

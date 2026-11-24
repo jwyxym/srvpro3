@@ -19,7 +19,10 @@ pub async fn create(
 	player_d: Option<String>,
 	deck_c: Option<String>,
 	deck_d: Option<String>,
+	room_type: Option<String>,
 ) -> Result<Model, Error> {
+	anyhow::ensure!(room_type.as_deref().is_none_or(|mode| matches!(mode, "Single" | "Match" | "Tag")), "房间类型无效");
+	anyhow::ensure!(room_type.as_deref().is_none_or(|mode| (mode == "Tag") == player_c.is_some()), "房间类型与双打字段不一致");
 	let tag_fields = [player_c.is_some(), player_d.is_some(), deck_c.is_some(), deck_d.is_some()];
 	anyhow::ensure!(tag_fields.iter().all(|value| *value) || tag_fields.iter().all(|value| !*value), "双打必须提供两名队友及其卡组");
 	let now: i64 = Utc::now().timestamp();
@@ -39,6 +42,7 @@ pub async fn create(
 		deck_d: Set(deck_d),
 		winner_id: Set(winner_id),
 		room_id: Set(room_id),
+		room_type: Set(room_type),
 		replay: Set(replay),
 		created_at: Set(now),
 		..Default::default()

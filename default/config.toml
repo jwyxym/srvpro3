@@ -139,12 +139,24 @@ post_score = true
 timeout = 5
 
 [cards]
+# 卡片图床地址：支持 {code} 卡号占位符
+image_url = ""
+# 服务端外部 WASM 分类模块路径；留空禁用，不提供内置模块
+wasm = ""
 # 自动重载间隔（秒），默认 30 分钟；<=0 禁用，主动 reload 后重新计时
 reload = 1800
 # 按顺序扫描的资源目录；加载目录中的 .cdb、*lflist.conf，并从 script 子目录查找脚本
 expansions = ["ygopro"]
 # 是否加载资源目录中的 .ypk 和 .zip 卡包
 ypk = true
+
+[cards.pack_image_urls]
+# 优先级：完整资源路径 > expansions 资源目录 > 来源文件名 > cards.image_url；留空跳过
+# 路径使用与 expansions 相同的相对或绝对形式，兼容 / 和 \ 分隔符，区分大小写
+# "ygopro" = "https://example.com/official/{code}.jpg"
+# "ygopro/custom.ypk" = "https://example.com/special/{code}.jpg"
+# "custom.ypk" = "https://example.com/custom/{code}.jpg"
+# "cards.cdb" = "https://example.com/official/{code}.png"
 
 # 额外 setcode 配置
 [cards.excode]

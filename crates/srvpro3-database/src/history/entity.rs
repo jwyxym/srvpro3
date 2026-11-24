@@ -18,6 +18,8 @@ pub struct Model {
 	pub deck_d: Option<String>,
 	pub winner_id: Option<String>, // 胜利者名称；无胜者时为空
 	pub room_id: String,        // 房间
+	#[serde(default)]
+	pub room_type: Option<String>, // Single / Match / Tag；旧记录可能未知
 	#[sea_orm(column_type = "Text")]
 	pub replay: Option<String>, // yrp3d:v1: + gzip/Base64，或 local:v1:相对路径、s3:v1:对象 key
 	pub created_at: i64,        // 时间戳

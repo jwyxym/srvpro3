@@ -101,6 +101,7 @@ pub struct RecordResponse {
 	deck_d: Option<String>,
 	winner_id: Option<String>,
 	room_id: String,
+	room_type: Option<String>,
 	replay: bool,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	replay_url: Option<String>,
@@ -121,6 +122,7 @@ impl From<Model> for RecordResponse {
 			deck_d: record.deck_d,
 			winner_id: record.winner_id,
 			room_id: record.room_id,
+			room_type: record.room_type,
 			replay: record.replay.is_some_and(|value| !value.is_empty()),
 			replay_url: None,
 			created_at: record.created_at,
@@ -139,6 +141,7 @@ pub async fn record_response(record: Model) -> RecordResponse {
 
 #[derive(Deserialize)]
 pub struct CreateRequest {
+	pub room_type: Option<String>,
 	pub player_a: String,
 	pub player_b: String,
 	pub deck_a: String,
@@ -211,6 +214,7 @@ pub async fn create(
 		&db, request.player_a, request.player_b, request.deck_a, request.deck_b,
 		request.winner_id, request.room_id, replay,
 		request.player_c, request.player_d, request.deck_c, request.deck_d,
+		request.room_type,
 	).await.map_err(|_| (StatusCode::BAD_REQUEST, "新增历史记录失败"))?;
 	Ok(Json(record_response(record).await))
 }

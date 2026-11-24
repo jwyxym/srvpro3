@@ -1,13 +1,19 @@
 <template>
 	<section v-if = 'isObject(model)' class = 'group'>
 		<h3 v-if = 'path'>{{ title }} <small>{{ path }}</small></h3>
+		<small v-if = 'path === "cards.pack_image_urls"'>可填写 expansions 中的资源目录（如 ygopro），或目录加文件名（如 ygopro/custom.ypk）以区分重名卡包。优先级：文件路径 → 资源目录 → 文件名 → 全局图床。留空则跳过此项；支持 {code} 占位符，路径区分大小写。</small>
 		<template v-for = 'key in fieldKeys' :key = 'key'>
 			<config-field :model-value = 'model[key]!' @update:model-value = '(value : ConfigValue) => setField(String(key), value)' :path = 'path ? `${path}.${key}` : String(key)' :disabled = 'disabled'/>
 			<el-button v-if = 'path === "cards.excode"' class = 'remove_card' :disabled = 'disabled' type = 'danger' plain @click = 'removeCard(String(key))'>删除卡号 {{ key }}</el-button>
+			<el-button v-if = 'path === "cards.pack_image_urls"' :disabled = 'disabled' type = 'danger' plain @click = 'removePack(String(key))'>删除图床配置 {{ key }}</el-button>
 		</template>
 		<div v-if = 'path === "cards.excode"' class = 'array_row'>
 			<el-input v-model = 'newKey' placeholder = '卡号' :disabled = 'disabled'/>
 			<el-button :disabled = 'disabled || !/^\d+$/.test(newKey) || Number(newKey) > 4294967295 || String(Number(newKey)) in model' @click = 'model[String(Number(newKey))] = []; newKey = ""'>添加卡号</el-button>
+		</div>
+		<div v-if = 'path === "cards.pack_image_urls"' class = 'array_row'>
+			<el-input v-model = 'newKey' placeholder = '资源目录或卡包路径，例如 ygopro/custom.ypk' :disabled = 'disabled' aria-label = '资源目录或卡包路径'/>
+			<el-button :disabled = 'disabled || !newKey.trim() || newKey.trim() in model' @click = 'model[newKey.trim()] = ""; newKey = ""'>添加卡包图床</el-button>
 		</div>
 	</section>
 	<div v-else class = 'field'>
@@ -24,6 +30,8 @@
 		<el-input-number v-else-if = 'typeof model === "number"' :id = 'inputId' :model-value = 'model' :precision = '0' :disabled = 'disabled || path === "http_api.port"' @update:model-value = '(value : number | undefined) => model = value ?? 0'/>
 		<el-input v-else :id = 'inputId' :model-value = 'String(model)' :type = 'secret ? "password" : path === "server.welcome" ? "textarea" : "text"' :show-password = 'secret' :autosize = '{ minRows : 2, maxRows : 6 }' :disabled = 'disabled' @update:model-value = '(value : string) => model = value'/>
 		<small v-if = 'path === "http_api.webui" || path === "http_api.port"'>此项禁止通过 WebUI 修改</small>
+		<small v-if = 'path === "cards.image_url"'>留空不显示卡图。支持地址模板，例如 https://example.com/cards/{code}.jpg；仅填写目录时自动追加卡号.jpg。</small>
+		<small v-if = 'path === "cards.classifier_wasm"'>服务器本地 WASM 文件路径，留空禁用分类。不提供内置模块；配置后由后端查询统计时调用 classify_deck 判断卡组标目。</small>
 	</div>
 </template>
 <script setup lang = 'ts'>
@@ -67,6 +75,9 @@
 		'server.udp' : 'KCP / UDP',
 		'server.ws' : 'WebSocket',
 		'cards.excode' : '额外系列字段',
+		'cards.image_url' : '卡片图床地址',
+		'cards.pack_image_urls' : '按卡包配置图床',
+		'cards.classifier_wasm' : 'WASM 分类器路径（留空禁用）',
 		welcome : '欢迎消息',
 		tips : '提示文件',
 		dialogues : '召唤台词文件',
@@ -106,7 +117,10 @@
 		path : '动态库目录',
 		bots : '机器人列表文件',
 	};
-	const title = computed(() => labels[props.path] ?? labels[props.path.split('.').at(-1)!] ?? props.path.split('.').at(-1)!);
+	const title : ComputedRef<string> = computed(() : string => {
+		const key : string = props.path.split('.').at(-1)!;
+		return labels[props.path] ?? labels[key] ?? key;
+	});
 	const inputId = computed(() => `config-${props.path}`);
 	const secret : ComputedRef<boolean> = computed(() : boolean => /\.(password|token|access_key_id|secret_access_key|session_token)$/.test(props.path));
 	const setField = (key : string, value : ConfigValue) => {
@@ -114,6 +128,9 @@
 	};
 	const removeCard = (key : string) => {
 		if (!props.disabled && props.path === 'cards.excode' && isObject(model.value)) delete model.value[key];
+	};
+	const removePack = (key : string) : void => {
+		if (!props.disabled && props.path === 'cards.pack_image_urls' && isObject(model.value)) delete model.value[key];
 	};
 	const setItem = (index : number, value : ConfigValue) => {
 		if (Array.isArray(model.value)) model.value[index] = value;

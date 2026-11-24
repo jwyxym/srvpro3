@@ -15,5 +15,6 @@ log.workspace = true
 redis.workspace = true
 
 srvpro3-deck.workspace = true
+srvpro3-plugin.workspace = true
 srvpro3-log.workspace = true
 srvpro3-config.workspace = true
