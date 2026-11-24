@@ -299,8 +299,21 @@ pub async fn run(
 					deadline: Instant::now() + Duration::from_secs(seconds),
 					resuming: resuming.clone(),
 				};
-				if attempt.socket.outgoing.try_send(join.clone()).is_err() || attempt.socket.outgoing.try_send(kind.clone()).is_err() { continue; }
-				let _ = attempt.socket.outgoing.try_send(bytes(stoc::Chat { player: Color::System.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
+				// JoinGame 会清空客户端准备页；验证卡组前也要补齐座位名单。
+				// 这里只展示房间快照，不将待验证连接加入引擎或替换原玩家。
+				let mut lobby: Vec<Vec<u8>> = vec![join.clone(), kind.clone()];
+				{
+					let record: MutexGuard<'_, RoomRecord> = record.lock().unwrap();
+					for player in record.players.values() {
+						if matches!(player.position, Netplayer::Player(_)) {
+							lobby.push(bytes(stoc::HsPlayerEnter { name: player.name.as_str().into(), pos: player.position }.into()));
+						}
+					}
+					let spectators: usize = record.players.values().filter(|player| player.connected && matches!(player.position, Netplayer::Observer(_))).count();
+					lobby.push(bytes(stoc::HsWatchChange { watch_count: spectators.min(u16::MAX as usize) as u16 }.into()));
+				}
+				lobby.push(bytes(stoc::Chat { player: Color::System.into(), msg: "检测到原玩家座位，请提交原卡组以验证重连。".into() }.into()));
+				if lobby.into_iter().any(|frame: Vec<u8>| attempt.socket.outgoing.try_send(frame).is_err()) { continue; }
 				// 与 srvpro2 一致：新连接顶替尚未完成的验证，旧的待验证连接直接关闭。
 				let replaced: bool = pending.take().is_some();
 				// 旧 Pending 的 Drop 会把标志置回 false，这里在它之后重新占住。

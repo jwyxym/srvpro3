@@ -113,12 +113,16 @@ impl RoomRecord {
 		match message {
 			stoc::Message::TypeChange(value) => {
 				if let Some(player) = self.players.get_mut(&id) {
+					// 准备处理器可能先于输出循环保存卡组，此时连接还没有座位号。
+					// 换座位时清除旧基准，同步暂存卡组时也补齐新座位的重连基准。
+					if player.position != value.player { player.reconnect_deck = None; }
 					player.position = value.player;
 					player.is_host = value.host;
 					player.deck = match value.player {
 						Netplayer::Player(slot) => self.accepted_decks.get(&slot).cloned(),
 						_ => None,
 					};
+					if player.reconnect_deck.is_none() { player.reconnect_deck = player.deck.clone(); }
 				}
 			}
 			stoc::Message::GameMessage(value) => match &value.message {

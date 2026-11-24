@@ -18,6 +18,8 @@ pub const NAME: &str = module_path!();
 fn on_duel_start(duel: &mut SingleDuel, config: RecordConfig) {
 	let (Some(a), Some(b)) = (duel.get(PlayerIndex(0)), duel.get(PlayerIndex(1))) else { return };
 	let mut record = config.0.lock().unwrap();
+	record.store_accepted_deck(0, Some(a.deck.clone()));
+	record.store_accepted_deck(1, Some(b.deck.clone()));
 	record.current_history = Some(HistoryRecord {
 		player_a: a.name.to_string(),
 		player_b: b.name.to_string(),
@@ -48,6 +50,10 @@ fn on_tag_start(duel: &mut TagDuel, config: RecordConfig) {
 		duel.get(PlayerIndex(2)), duel.get(PlayerIndex(3)),
 	) else { return };
 	let mut record = config.0.lock().unwrap();
+	record.store_accepted_deck(0, Some(a.deck.clone()));
+	record.store_accepted_deck(1, Some(a_tag.deck.clone()));
+	record.store_accepted_deck(2, Some(b.deck.clone()));
+	record.store_accepted_deck(3, Some(b_tag.deck.clone()));
 	record.current_history = Some(HistoryRecord {
 		player_a: a.name.to_string(), player_b: b.name.to_string(),
 		deck_a: a.deck.to_string(), deck_b: b.deck.to_string(),
