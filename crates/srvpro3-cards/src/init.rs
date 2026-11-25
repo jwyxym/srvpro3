@@ -71,6 +71,9 @@ pub async fn init() -> Result<(), Error> {
 	let expansions: Vec<String> = config.cards.expansions.clone();
 	let ypk: bool = config.cards.ypk;
 	let excode: BTreeMap<u32, Vec<u16>> = config.cards.excode.clone();
+	let img: bool = !config.cards.image_url.trim().is_empty()
+		|| config.cards.pack_image_urls.values().any(|url: &String| !url.trim().is_empty());
+	let wasm: String = config.cards.wasm.trim().to_owned();
 	drop(config);
 	let mut snapshot: CardsSnapshot = CardsSnapshot::new();
 	for i in expansions {
@@ -104,6 +107,16 @@ pub async fn init() -> Result<(), Error> {
 		info!("加载ypk数量: {}", snapshot.packs.len());
 	} else {
 		warn!("未启用ypk卡包，如需启用，请修改config.toml的内容");
+	}
+	if img {
+		info!("已启用卡片图床");
+	} else {
+		warn!("未启用卡片图床，如需启用，请修改config.toml的内容");
+	}
+	if !wasm.is_empty() {
+		info!("已启用WASM卡组分类，模块路径：{wasm}");
+	} else {
+		warn!("未启用WASM卡组分类，如需启用，请修改config.toml的内容");
 	}
 	info!("加载禁卡表数量: {}", snapshot.lflists.len());
 	info!("加载卡片数量: {}", snapshot.cards.len());
