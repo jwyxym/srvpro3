@@ -5907,9 +5907,9 @@ checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "ygopro"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b335150ed1f208e94cddae31934814969d1c301d71ae2feb712c9d1a82f2d03"
+checksum = "1221697fedc866de71e0886ef1cb4dcf91e3719d1fd0582e28e72dc5104a14a7"
 dependencies = [
  "anymap3",
  "arc-swap",
@@ -5941,9 +5941,9 @@ dependencies = [
 
 [[package]]
 name = "ygopro-core-wrapper"
-version = "0.2.0+3209cd866a"
+version = "0.2.1+5b97f8c4fb"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1ea03477e6dcb552ed3a1295c69c4b0b89eaad0a764dd5e6c27b705b2f91761"
+checksum = "2a6cace6377394d21b1fd09737bc43159e52f88da249effc1173bd2a97b772fd"
 dependencies = [
  "cc",
  "glob",
@@ -5957,9 +5957,9 @@ dependencies = [
 
 [[package]]
 name = "ygopro-data"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb009cfee8da458e3e8d24c8860f1d42dc539fca148f43ecc2d0920a051a8e4"
+checksum = "1f830cc101bcd63334d6d3d9db576136a0e9f98a968c9e4ae0ef90dedb7d4609"
 dependencies = [
  "binrw",
  "bitflags 2.13.2",
