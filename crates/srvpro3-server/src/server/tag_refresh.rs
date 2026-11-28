@@ -38,8 +38,6 @@ fn turn(state: &mut FieldState, message: &gm::NewTurn) { state.turns.push(messag
 #[register_to(YGOCORE_HANDLERS as CoreHandler)]
 fn reverse(state: &mut FieldState) { state.deck_reversed = !state.deck_reversed; }
 
-// 上游将未上场队友映射成 None(2)/Rule(5)，这只能用于选人，不能用于场面查询。
-// 快照始终使用队伍对应的 0/1；发送目标仍是原座位，不改变实际行动玩家。
 #[before(ctos::RequestField)]
 #[register_to(TAG_DUEL_YGOPRO_HANDLERS)]
 fn refresh(
@@ -54,6 +52,7 @@ fn refresh(
 	if duel.stage != DuelStage::Dueling || duel.get(player).is_none() { return; }
 	let sender: UnboundedSender<Complex<stoc::Message>> = duel.get(player).unwrap().stoc_sender.clone();
 	let own: CorePlayer = transformer.team_to_core_player(player.team());
+	let viewer: CorePlayer = transformer.to_core_player(player.into());
 	let opponent: CorePlayer = own.opponent();
 	let length: usize = duel.duel.core.query_field_info(&mut duel.duel.core_request_buffer) as usize;
 	let mut cursor: Cursor<&[u8]> = Cursor::new(&duel.duel.core_request_buffer[..length]);
@@ -78,11 +77,13 @@ fn refresh(
 	messages.push(gm::NewPhase { phase: state.phase }.into());
 	messages.push(field.into());
 	for location in [Location::MZone, Location::SZone, Location::Hand, Location::Grave, Location::Extra, Location::Removed] {
-		for mut message in duel.refresh_location(opponent, location, Query::all()) {
-			if !duel.configuration.no_mask { message.mask(); }
-			messages.push(message.into());
+		for side in [opponent, own] {
+			for mut message in duel.refresh_location(side, location, Query::all()) {
+				// 与 Duel::send_game_message 相同：未上场队友不能读取当前队员的隐藏手牌和额外。
+				if !duel.configuration.no_mask && message.should_mask(viewer) { message.mask(); }
+				messages.push(message.into());
+			}
 		}
-		for message in duel.refresh_location(own, location, Query::all()) { messages.push(message.into()); }
 	}
 	if state.deck_reversed { messages.push(gm::ReverseDeck.into()); }
 	for side in [CorePlayer::FirstAttackPlayer, CorePlayer::SecondAttackPlayer] {
@@ -113,7 +114,7 @@ fn refresh(
 	if duel.last_response == Some(player) {
 		if let Some(message) = &duel.last_select_message { messages.push(message.clone().into()); }
 	}
-	// 恢复包含本队手牌，不广播，也不混入观战补发和录像。
+	// 只发送该玩家有权看到的恢复数据，不广播，也不混入观战补发和录像。
 	for message in messages {
 		if sender.send(Complex::from_message(message)).is_err() { break; }
 	}
